@@ -1,0 +1,26 @@
+{
+  "name": "http-load-test",
+  "version": "0.0.2",
+  "description": "Complete endpoint load test",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "publish": "npm publish"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrtcmn/http-load-test.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mrtcmn/http-load-test/issues"
+  },
+  "homepage": "https://github.com/mrtcmn/http-load-test#readme",
+  "dependencies": {
+    "axios": "^0.19.2"
+  },
+  "devDependencies": {
+    "express": "^4.17.1"
+  }
+}
