@@ -2,7 +2,7 @@
 
 Complete endpoint load test.
 
-##Installation
+## Installation
 
 Choose to favorite package manager and install `http-load-test` package.
 
@@ -12,7 +12,7 @@ or
 
 `yarn install http-load-test`
 
-##Basic Usage
+## Basic Usage
 
 ```javascript
 const HttpLoadTest = require('http-load-test');
