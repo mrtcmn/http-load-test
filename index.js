@@ -19,9 +19,7 @@ class HttpLoadTest {
     };
 
     this.MAIN_JOB = [];
-
     this.successChecker = undefined;
-
     this.parseConfig(config);
   }
 
@@ -57,7 +55,7 @@ class HttpLoadTest {
 
 
     _c[CONFIG_PARAMS.HEADERS] ? this.prepareAxiosOptions([CONFIG_PARAMS.HEADERS], _c, 'headers') : null;
-    _c[CONFIG_PARAMS.BODY] ? this.prepareAxiosOptions([CONFIG_PARAMS.BODY], _c, 'body') : null;
+    _c[CONFIG_PARAMS.DATA] ? this.prepareAxiosOptions([CONFIG_PARAMS.DATA], _c, 'data') : null;
 
     this.successChecker = _c[CONFIG_PARAMS.SUCCESS_CHECKER_FN] ? _c[CONFIG_PARAMS.SUCCESS_CHECKER_FN] : null;
 
@@ -69,7 +67,6 @@ class HttpLoadTest {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         const httpRequestTicket = () => {
-
           axios(
             this.AXIOS_OPTIONS
           )
@@ -78,12 +75,14 @@ class HttpLoadTest {
               if (this.successChecker) {
                 const _sc = this.successChecker(res);
                 if (_sc) {
-                  this.stats.passed++
+                  this.stats.passed++;
+                } else {
+                  this.stats.failed++;
+
                 }
-                this.stats.failed++
 
               } else {
-                this.stats.passed++
+                this.stats.passed++;
               }
 
               resolve();
@@ -103,6 +102,15 @@ class HttpLoadTest {
 
   startTest() {
     this.MAIN_JOB = new Array(this.TOTAL_REQUEST).fill(true).map((i, index) => this.oneJob(index));
+    Promise.all(this.MAIN_JOB).then((allRes) => {
+      console.log('__________________________________________');
+      console.log('               TEST COMPLETE              ');
+      console.log(this.stats);
+
+     // console.log(allRes);
+    }).catch((e) => {
+
+    })
   }
 }
 

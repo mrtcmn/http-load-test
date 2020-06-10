@@ -4,7 +4,7 @@ const CONFIG_PARAMS = {
   "TOTAL_REQUEST": "totalRequest",
   "PER_SECOND_REQUEST": "psRequest",
   "HEADERS": "headers",
-  "BODY": "body",
+  "DATA": "data",
   "SUCCESS_CHECKER_FN": "successChecker"
 }
 

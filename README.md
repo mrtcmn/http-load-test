@@ -20,7 +20,15 @@ const HttpLoadTest = require('http-load-test');
 let job = new HttpLoadTest({
   url: 'http://localhost:8001/test', // Pass setting where you want to request
   totalRequest: 10, // How many request you want
-  psRequest: 1 // How many request you want for each second
+  psRequest: 1, // How many request you want for each second
+  method: 'post', // You can use all axios http methods
+  data: { // as body
+    test: "test2"
+  },
+  headers: {
+    'CustomHeaderKey': 'CustomHeaderValue',
+    'content-type': 'application/json', 
+  },
 })
 
 job.startTest(); // Don't forget to fire test
@@ -31,8 +39,8 @@ job.startTest(); // Don't forget to fire test
 
 If you want to contribute feel to free for join. Open issue. 
 
-- [ ] Support other http methods.
-- [ ] Body and header append
+- [x] Support other http methods.
+- [x] Body and header append
 - [ ] Allow to all axios options.
 - [ ] Custom success response function
 - [ ] Advanced statistics such as http ms, total time etc.
