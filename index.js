@@ -70,10 +70,15 @@ class HttpLoadTest {
   }
 
 
+  setRequestSuccessChecker(checkerHandler) {
+    this.successChecker = checkerHandler;
+  }
+
+
   oneJob(index) {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        const httpRequest= () => {
+        const httpRequest = () => {
           axios(
             this.AXIOS_REQUEST_CONFIG
           )
@@ -96,8 +101,21 @@ class HttpLoadTest {
               console.log(this.stats);
             })
             .catch(error => {
+
+
+              if (this.successChecker) {
+                const _sc = this.successChecker(error);
+                if (_sc) {
+                  this.stats.passed++;
+                } else {
+                  this.stats.failed++;
+                }
+
+              } else {
+                this.stats.passed++;
+              }
+
               this.stats.total++;
-              this.stats.failed++;
               resolve();
             })
         };

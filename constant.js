@@ -5,7 +5,7 @@ const CONFIG_PARAMS = {
   "PER_SECOND_REQUEST": "psRequest",
   "HEADERS": "headers",
   "DATA": "data",
-  "SUCCESS_CHECKER_FN": "successChecker",
+  "SUCCESS_CHECKER_FN": "requestSuccessChecker",
   "OTHER_AXIOS_REQUEST_CONFIGS": "requestConfig"
 }
 

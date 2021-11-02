@@ -40,6 +40,26 @@ job.startTest(); // For starting to http load test.
 
 ```
 
+## Methods
+
+`setRequestSuccessChecker`
+
+If result success related response's body, or status code, setRequestSuccessChecker method can be used for purpose.
+
+Example:
+```javascript
+httpLoadInstance.setRequestSuccessChecker((response) => {
+  try {
+    if (response.data.dc === 'Success') {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+});
+```
+
 ##TODO's
 
 If you want to contribute feel to free for join. Open issue. 
