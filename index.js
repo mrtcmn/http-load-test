@@ -1,15 +1,15 @@
 const axios = require('axios');
 const {CONFIG_PARAMS} = require('./constant');
 const {_aa} = require('./utlis');
+const _ = require("lodash");
 
 class HttpLoadTest {
-
 
   constructor(config) {
 
     this.TOTAL_REQUEST = 0;
     this.PER_SECOND_REQUEST = 0;
-    this.AXIOS_OPTIONS = {
+    this.AXIOS_REQUEST_CONFIG = {
       method: 'get'
     };
     this.stats = {
@@ -24,14 +24,12 @@ class HttpLoadTest {
   }
 
 
-  prepareAxiosOptions(key, data, axiosKey) {
+  prepareAxiosOptions(axiosRequestKey, value) {
 
-    let _config = _aa(key, data);
-
-    if (_config) {
-      this.AXIOS_OPTIONS = {
-        ...this.AXIOS_OPTIONS,
-        ...{[axiosKey]: _config}
+    if (axiosRequestKey) {
+      this.AXIOS_REQUEST_CONFIG = {
+        ...this.AXIOS_REQUEST_CONFIG,
+        ...{[axiosRequestKey]: value}
       }
     } else {
       return false;
@@ -48,14 +46,23 @@ class HttpLoadTest {
     this.TOTAL_REQUEST = _c[CONFIG_PARAMS.TOTAL_REQUEST] || 10;
     this.PER_SECOND_REQUEST = _c[CONFIG_PARAMS.PER_SECOND_REQUEST] || 10;
     this.stats.totalRequest = this.TOTAL_REQUEST;
+
+
     // Axios configuration
+    _c[CONFIG_PARAMS.URL] ? this.prepareAxiosOptions('url', _c[CONFIG_PARAMS.URL]) : null;
+    _c[CONFIG_PARAMS.METHOD] ? this.prepareAxiosOptions('method', _c[CONFIG_PARAMS.METHOD]) : null;
+    _c[CONFIG_PARAMS.HEADERS] ? this.prepareAxiosOptions('headers', _c[CONFIG_PARAMS.HEADERS]) : null;
+    _c[CONFIG_PARAMS.DATA] ? this.prepareAxiosOptions('data', _c[CONFIG_PARAMS.DATA]) : null;
 
-    _c[CONFIG_PARAMS.URL] ? this.prepareAxiosOptions([CONFIG_PARAMS.URL], _c, 'url') : null;
-    _c[CONFIG_PARAMS.METHOD] ? this.prepareAxiosOptions([CONFIG_PARAMS.METHOD], _c, 'method') : null;
 
+    if (_c[CONFIG_PARAMS.OTHER_AXIOS_REQUEST_CONFIGS] && _.isPlainObject(_c[CONFIG_PARAMS.OTHER_AXIOS_REQUEST_CONFIGS])) {
+      Object.keys(_c[CONFIG_PARAMS.OTHER_AXIOS_REQUEST_CONFIGS]).forEach((configKey) => {
+        this.prepareAxiosOptions(configKey, _c[CONFIG_PARAMS.OTHER_AXIOS_REQUEST_CONFIGS][configKey]);
+      });
+    } else {
+      throw new Error("responseConfig is not valid object.")
+    }
 
-    _c[CONFIG_PARAMS.HEADERS] ? this.prepareAxiosOptions([CONFIG_PARAMS.HEADERS], _c, 'headers') : null;
-    _c[CONFIG_PARAMS.DATA] ? this.prepareAxiosOptions([CONFIG_PARAMS.DATA], _c, 'data') : null;
 
     this.successChecker = _c[CONFIG_PARAMS.SUCCESS_CHECKER_FN] ? _c[CONFIG_PARAMS.SUCCESS_CHECKER_FN] : null;
 
@@ -66,9 +73,9 @@ class HttpLoadTest {
   oneJob(index) {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        const httpRequestTicket = () => {
+        const httpRequest= () => {
           axios(
-            this.AXIOS_OPTIONS
+            this.AXIOS_REQUEST_CONFIG
           )
             .then(res => {
 
@@ -94,7 +101,7 @@ class HttpLoadTest {
               resolve();
             })
         };
-        httpRequestTicket();
+        httpRequest();
       }, index * (1000 / this.PER_SECOND_REQUEST));
     });
   }
@@ -107,7 +114,7 @@ class HttpLoadTest {
       console.log('               TEST COMPLETE              ');
       console.log(this.stats);
 
-     // console.log(allRes);
+      // console.log(allRes);
     }).catch((e) => {
 
     })

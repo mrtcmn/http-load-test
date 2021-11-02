@@ -18,7 +18,8 @@
   },
   "homepage": "https://github.com/mrtcmn/http-load-test#readme",
   "dependencies": {
-    "axios": "^0.19.2"
+    "axios": "^0.19.2",
+    "lodash": "^4.17.21"
   },
   "devDependencies": {
     "body-parser": "^1.19.0",

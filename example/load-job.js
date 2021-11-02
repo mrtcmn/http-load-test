@@ -4,7 +4,7 @@ let job = new HttpLoadTest({
   url: 'http://localhost:8001/test',
   method: 'post',
   totalRequest: 10,
-  psRequest: 10,
+  psRequest: 1,
   data: {
     test: "test2"
   },
@@ -12,7 +12,9 @@ let job = new HttpLoadTest({
     'CustomHeaderKey': 'CustomHeaderValue',
     'content-type': 'application/json',
   },
-
+  requestConfig: {
+    responseType: 'json',
+  }
 })
 
 job.startTest();

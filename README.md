@@ -1,5 +1,7 @@
 # http-load-test (Alpha)
 
+[![npm version](https://badge.fury.io/js/http-load-test.svg)](https://badge.fury.io/js/http-load-test)
+
 Complete endpoint load test.
 
 ## Installation
@@ -18,20 +20,23 @@ or
 const HttpLoadTest = require('http-load-test');
 
 let job = new HttpLoadTest({
-  url: 'http://localhost:8001/test', // Pass setting where you want to request
-  totalRequest: 10, // How many request you want
-  psRequest: 1, // How many request you want for each second
-  method: 'post', // You can use all axios http methods
-  data: { // as body
+  url: 'http://localhost:8001/test', // Enpoint Url
+  totalRequest: 10, // How many request what you want as TOTAL
+  psRequest: 1, // How many request you want for PER SECOND
+  method: 'post', // Http methods
+  data: { // Body
     test: "test2"
   },
   headers: {
     'CustomHeaderKey': 'CustomHeaderValue',
     'content-type': 'application/json', 
   },
+  requestConfig: { // All axios request configs can apply here 
+    responseType: 'json',
+  }
 })
 
-job.startTest(); // Don't forget to fire test
+job.startTest(); // For starting to http load test.
 
 ```
 
@@ -41,7 +46,7 @@ If you want to contribute feel to free for join. Open issue.
 
 - [x] Support other http methods.
 - [x] Body and header append
-- [ ] Allow to all axios options.
+- [x] Allow to all axios options.
 - [ ] Custom success response function
 - [ ] Advanced statistics such as http ms, total time etc.
 - [ ] Handling all error codes and append total report
