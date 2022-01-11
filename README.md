@@ -60,6 +60,17 @@ httpLoadInstance.setRequestSuccessChecker((response) => {
 });
 ```
 
+`setDynamicDataFunction`
+
+With this method, different data can be generated for each request.
+
+```javascript
+httpLoadInstance.setDynamicDataFunction(() => ( {
+  test: Date.now().toString()
+}));
+```
+
+
 ##TODO's
 
 If you want to contribute feel to free for join. Open issue. 

@@ -1,4 +1,4 @@
-const axios = require('axios');
+const httpHelper = require('./utils/httpHelper');
 const {CONFIG_PARAMS} = require('./constant');
 const {_aa} = require('./utlis');
 const _ = require("lodash");
@@ -17,6 +17,8 @@ class HttpLoadTest {
       failed: 0,
       totalRequest: 0
     };
+
+    this.dynamicDataFunction = undefined;
 
     this.MAIN_JOB = [];
     this.successChecker = undefined;
@@ -74,13 +76,22 @@ class HttpLoadTest {
     this.successChecker = checkerHandler;
   }
 
+  setDynamicDataFunction(dynamicDataFunction) {
+    this.dynamicDataFunction = dynamicDataFunction;
+  }
+
 
   oneJob(index) {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         const httpRequest = () => {
-          axios(
-            this.AXIOS_REQUEST_CONFIG
+          httpHelper(
+            {
+              ...this.AXIOS_REQUEST_CONFIG,
+              ...{
+                data: (this.dynamicDataFunction ? this.dynamicDataFunction() : null)
+              }
+            }
           )
             .then(res => {
 
