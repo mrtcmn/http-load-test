@@ -2,6 +2,7 @@ const httpHelper = require('./utils/httpHelper');
 const {CONFIG_PARAMS} = require('./constant');
 const {_aa} = require('./utlis');
 const _ = require("lodash");
+const EventEmitter = require('events');
 
 class HttpLoadTest {
 
@@ -19,6 +20,8 @@ class HttpLoadTest {
     };
 
     this.dynamicDataFunction = undefined;
+
+    this.onListener = new EventEmitter();
 
     this.MAIN_JOB = [];
     this.successChecker = undefined;
@@ -136,9 +139,13 @@ class HttpLoadTest {
   }
 
 
+
   startTest() {
     this.MAIN_JOB = new Array(this.TOTAL_REQUEST).fill(true).map((i, index) => this.oneJob(index));
     Promise.all(this.MAIN_JOB).then((allRes) => {
+
+      this.onListener.emit('finished', this.stats);
+
       console.log('__________________________________________');
       console.log('               TEST COMPLETE              ');
       console.log(this.stats);
@@ -148,6 +155,8 @@ class HttpLoadTest {
 
     })
   }
+
+
 }
 
 module.exports = HttpLoadTest;
