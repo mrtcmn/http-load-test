@@ -1,6 +1,6 @@
 {
   "name": "http-load-test",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Complete endpoint load test",
   "main": "index.js",
   "scripts": {
