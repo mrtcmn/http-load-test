@@ -6,7 +6,8 @@ const CONFIG_PARAMS = {
   "HEADERS": "headers",
   "DATA": "data",
   "SUCCESS_CHECKER_FN": "requestSuccessChecker",
-  "OTHER_AXIOS_REQUEST_CONFIGS": "requestConfig"
+  "OTHER_AXIOS_REQUEST_CONFIGS": "requestConfig",
+  "CONCURRENT_REQUEST": "concurrentRequest"
 }
 
 

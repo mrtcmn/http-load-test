@@ -10,6 +10,7 @@ class HttpLoadTest {
 
     this.TOTAL_REQUEST = 0;
     this.PER_SECOND_REQUEST = 0;
+    this.CONCURRENT_REQUEST = 1;
     this.AXIOS_REQUEST_CONFIG = {
       method: 'get'
     };
@@ -52,6 +53,7 @@ class HttpLoadTest {
 
     this.TOTAL_REQUEST = _c[CONFIG_PARAMS.TOTAL_REQUEST] || 10;
     this.PER_SECOND_REQUEST = _c[CONFIG_PARAMS.PER_SECOND_REQUEST] || 10;
+    this.CONCURRENT_REQUEST = _c[CONFIG_PARAMS.CONCURRENT_REQUEST] || 1;
     this.stats.totalRequest = this.TOTAL_REQUEST;
 
 
@@ -143,7 +145,7 @@ class HttpLoadTest {
 
 
   startTest() {
-    this.MAIN_JOB = new Array(this.TOTAL_REQUEST).fill(true).map((i, index) => this.oneJob(index));
+    this.MAIN_JOB = new Array(this.TOTAL_REQUEST).fill(true).map((i, index) => this.oneJob(Math.floor(index / this.CONCURRENT_REQUEST)));
     Promise.all(this.MAIN_JOB).then((allRes) => {
 
       this.onListener.emit('finished', this.stats);
