@@ -59,15 +59,15 @@
     - Write integration tests for real-time streaming
     - _Requirements: 4.4, 3.2_
 
-- [ ] 5. Build web server and REST API
-  - [ ] 5.1 Create HTTP server with static file serving
+- [x] 5. Build web server and REST API
+  - [x] 5.1 Create HTTP server with static file serving
     - Implement HTTP server with embedded static assets
     - Add routes for serving Vue.js application
     - Create middleware for CORS and security headers
     - Write tests for web server functionality
     - _Requirements: 4.1, 4.2_
 
-  - [ ] 5.2 Implement REST API endpoints
+  - [x] 5.2 Implement REST API endpoints
     - Create /api/status endpoint for test status
     - Implement /api/results endpoint for final results
     - Add /api/export endpoint for JSON/CSV export
