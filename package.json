@@ -1,11 +1,18 @@
 {
   "name": "http-load-test",
   "version": "0.3.0",
-  "description": "Complete endpoint load test",
+  "description": "Complete endpoint load test with Go engine and Vue.js interface",
   "main": "index.js",
+  "bin": {
+    "http-load-test": "./bin/http-load-test.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "publish": "npm publish"
+    "publish": "npm publish",
+    "build": "make build",
+    "build:web": "cd web && npm run build",
+    "dev:web": "cd web && npm run dev",
+    "postinstall": "node scripts/install-binary.js"
   },
   "repository": {
     "type": "git",
@@ -24,5 +31,16 @@
   "devDependencies": {
     "body-parser": "^1.19.0",
     "express": "^4.17.1"
-  }
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "load-testing",
+    "http",
+    "performance",
+    "testing",
+    "go",
+    "vue"
+  ]
 }
