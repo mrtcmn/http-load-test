@@ -29,15 +29,15 @@
     - Write tests for concurrent execution and rate limiting
     - _Requirements: 1.1, 1.2, 3.4_
 
-- [ ] 3. Build configuration parsing and validation system
-  - [ ] 3.1 Create configuration data structures and validation
+- [x] 3. Build configuration parsing and validation system
+  - [x] 3.1 Create configuration data structures and validation
     - Define TestConfig struct matching existing API parameters
     - Implement JSON configuration parsing and validation
     - Add support for JavaScript function serialization (success checker, dynamic data)
     - Write unit tests for configuration validation
     - _Requirements: 2.1, 7.3_
 
-  - [ ] 3.2 Implement JavaScript function execution in Go
+  - [x] 3.2 Implement JavaScript function execution in Go
     - Integrate JavaScript engine (goja) for success checker evaluation
     - Create secure sandbox for JavaScript function execution
     - Implement dynamic data function execution for each request
