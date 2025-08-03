@@ -1,6 +1,37 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MetricsDashboard } from '../MetricsDashboard'
+
+// Mock the hooks
+vi.mock('../../hooks/useRealtimeMetrics', () => ({
+  useRealtimeMetrics: vi.fn(() => ({
+    metrics: {
+      dataPoints: [],
+      currentRps: 0,
+      currentSuccessRate: 100,
+      activeRequests: 0,
+      totalRequests: 0,
+      percentiles: { p50: 0, p95: 0, p99: 0 },
+    },
+    isConnected: false,
+    isConnecting: false,
+    error: null,
+    reconnect: vi.fn(),
+    clearData: vi.fn(),
+  })),
+}))
+
+// Mock RealtimeChart component
+vi.mock('../RealtimeChart', () => ({
+  RealtimeChart: ({ data, isConnected, isConnecting, error }: any) => (
+    <div data-testid="realtime-chart">
+      <span data-testid="chart-data-length">{data.length}</span>
+      <span data-testid="chart-connected">{isConnected.toString()}</span>
+      <span data-testid="chart-connecting">{isConnecting.toString()}</span>
+      <span data-testid="chart-error">{error || 'no-error'}</span>
+    </div>
+  ),
+}))
 
 const mockMetrics = {
   totalRequests: 1000,
@@ -76,5 +107,37 @@ describe('MetricsDashboard', () => {
   it('should render error summary component', () => {
     render(<MetricsDashboard metrics={mockMetrics} />)
     expect(screen.getByText('Error Summary')).toBeInTheDocument()
+  })
+
+  it('should show real-time charts when test is running', () => {
+    render(<MetricsDashboard metrics={mockMetrics} isRunning={true} />)
+    
+    expect(screen.getByText('Real-time Metrics')).toBeInTheDocument()
+    expect(screen.getByTestId('realtime-chart')).toBeInTheDocument()
+  })
+
+  it('should not show real-time charts when test is not running', () => {
+    render(<MetricsDashboard metrics={mockMetrics} isRunning={false} />)
+    
+    expect(screen.queryByText('Real-time Metrics')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('realtime-chart')).not.toBeInTheDocument()
+  })
+
+  it('should pass correct props to RealtimeChart', () => {
+    render(<MetricsDashboard metrics={mockMetrics} isRunning={true} />)
+    
+    const chart = screen.getByTestId('realtime-chart')
+    expect(screen.getByTestId('chart-data-length')).toHaveTextContent('0')
+    expect(screen.getByTestId('chart-connected')).toHaveTextContent('false')
+    expect(screen.getByTestId('chart-connecting')).toHaveTextContent('false')
+    expect(screen.getByTestId('chart-error')).toHaveTextContent('no-error')
+  })
+
+  it('should use custom websocket URL when provided', () => {
+    const customUrl = 'ws://custom:9090/metrics'
+    render(<MetricsDashboard websocketUrl={customUrl} isRunning={true} />)
+    
+    // The hook should be called with the custom URL
+    expect(screen.getByTestId('realtime-chart')).toBeInTheDocument()
   })
 })

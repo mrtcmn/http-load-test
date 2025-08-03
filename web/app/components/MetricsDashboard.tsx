@@ -2,6 +2,8 @@ import React from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { PercentileMetrics } from './PercentileMetrics'
 import { ErrorSummary } from './ErrorSummary'
+import { RealtimeChart } from './RealtimeChart'
+import { useRealtimeMetrics } from '../hooks/useRealtimeMetrics'
 
 interface MetricsSummary {
   totalRequests: number
@@ -27,9 +29,18 @@ interface MetricsSummary {
 interface MetricsDashboardProps {
   metrics?: MetricsSummary
   isRunning?: boolean
+  websocketUrl?: string
 }
 
-export function MetricsDashboard({ metrics, isRunning = false }: MetricsDashboardProps) {
+export function MetricsDashboard({ 
+  metrics, 
+  isRunning = false, 
+  websocketUrl = 'ws://localhost:8080/ws/metrics' 
+}: MetricsDashboardProps) {
+  const realtimeMetrics = useRealtimeMetrics({
+    websocketUrl,
+    maxDataPoints: 100,
+  })
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -86,6 +97,20 @@ export function MetricsDashboard({ metrics, isRunning = false }: MetricsDashboar
           </CardContent>
         </Card>
       </div>
+
+      {/* Real-time Charts */}
+      {isRunning && (
+        <div className="space-y-6">
+          <h2 className="text-xl font-semibold">Real-time Metrics</h2>
+          <RealtimeChart
+            data={realtimeMetrics.metrics.dataPoints}
+            isConnected={realtimeMetrics.isConnected}
+            isConnecting={realtimeMetrics.isConnecting}
+            error={realtimeMetrics.error}
+            onReconnect={realtimeMetrics.reconnect}
+          />
+        </div>
+      )}
 
       {/* Detailed Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
