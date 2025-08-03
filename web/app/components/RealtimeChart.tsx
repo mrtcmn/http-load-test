@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   LineChart,
   Line,
@@ -10,7 +10,10 @@ import {
   Legend,
 } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from './ui/chart'
+import { ChartErrorBoundary } from './ErrorBoundary'
+import { LoadTestFrontendError, globalErrorHandler } from '../utils/errorHandling'
 
 export interface RealtimeDataPoint {
   timestamp: number
@@ -24,8 +27,15 @@ interface RealtimeChartProps {
   data: RealtimeDataPoint[]
   isConnected: boolean
   isConnecting: boolean
-  error: string | null
+  error: LoadTestFrontendError | null
   onReconnect?: () => void
+}
+
+interface ChartHealth {
+  hasData: boolean
+  dataAge: number
+  isStale: boolean
+  lastUpdate: number | null
 }
 
 const chartConfig = {
@@ -58,22 +68,35 @@ function formatTimestamp(timestamp: number): string {
 
 function CustomTooltip({ active, payload, label }: any) {
   if (active && payload && payload.length) {
-    return (
-      <ChartTooltip>
-        <ChartTooltipContent>
-          <div className="space-y-1">
-            <p className="font-medium">{formatTimestamp(label)}</p>
-            {payload.map((entry: any, index: number) => (
-              <p key={index} style={{ color: entry.color }}>
-                {entry.name}: {entry.value.toFixed(entry.dataKey === 'successRate' ? 1 : 0)}
-                {entry.dataKey === 'responseTime' && 'ms'}
-                {entry.dataKey === 'successRate' && '%'}
-              </p>
-            ))}
-          </div>
-        </ChartTooltipContent>
-      </ChartTooltip>
-    )
+    try {
+      return (
+        <ChartTooltip>
+          <ChartTooltipContent>
+            <div className="space-y-1">
+              <p className="font-medium">{formatTimestamp(label)}</p>
+              {payload.map((entry: any, index: number) => {
+                const value = typeof entry.value === 'number' ? entry.value : 0
+                const formattedValue = value.toFixed(entry.dataKey === 'successRate' ? 1 : 0)
+                
+                return (
+                  <p key={index} style={{ color: entry.color }}>
+                    {entry.name}: {formattedValue}
+                    {entry.dataKey === 'responseTime' && 'ms'}
+                    {entry.dataKey === 'successRate' && '%'}
+                  </p>
+                )
+              })}
+            </div>
+          </ChartTooltipContent>
+        </ChartTooltip>
+      )
+    } catch (error) {
+      globalErrorHandler.handleError(
+        new Error('Tooltip rendering failed'),
+        { payload, label, error }
+      )
+      return null
+    }
   }
   return null
 }
@@ -85,6 +108,67 @@ export function RealtimeChart({
   error,
   onReconnect,
 }: RealtimeChartProps) {
+  const [chartError, setChartError] = useState<LoadTestFrontendError | null>(null)
+  const [lastDataUpdate, setLastDataUpdate] = useState<number | null>(null)
+
+  // Track data updates
+  useEffect(() => {
+    if (data.length > 0) {
+      setLastDataUpdate(Date.now())
+    }
+  }, [data])
+
+  // Calculate chart health
+  const chartHealth = useMemo((): ChartHealth => {
+    const hasData = data.length > 0
+    const lastUpdate = lastDataUpdate
+    const dataAge = lastUpdate ? Date.now() - lastUpdate : 0
+    const isStale = dataAge > 30000 // Consider stale after 30 seconds
+
+    return {
+      hasData,
+      dataAge,
+      isStale,
+      lastUpdate
+    }
+  }, [data, lastDataUpdate])
+
+  // Validate and sanitize data
+  const sanitizedData = useMemo(() => {
+    try {
+      return data.map((point, index) => {
+        // Validate data point structure
+        if (!point || typeof point !== 'object') {
+          throw new Error(`Invalid data point at index ${index}`)
+        }
+
+        // Sanitize numeric values
+        const sanitized = {
+          timestamp: Number(point.timestamp) || Date.now(),
+          responseTime: Math.max(0, Number(point.responseTime) || 0),
+          requestsPerSecond: Math.max(0, Number(point.requestsPerSecond) || 0),
+          successRate: Math.min(100, Math.max(0, Number(point.successRate) || 0)),
+          activeRequests: Math.max(0, Number(point.activeRequests) || 0)
+        }
+
+        // Check for invalid values
+        if (Object.values(sanitized).some(val => isNaN(val))) {
+          throw new Error(`Invalid numeric values in data point at index ${index}`)
+        }
+
+        return sanitized
+      })
+    } catch (error) {
+      const chartError = globalErrorHandler.createChartError(
+        'CHART_DATA_INVALID',
+        'Chart data validation failed',
+        { originalData: data, error }
+      )
+      setChartError(chartError)
+      return []
+    }
+  }, [data])
+
   const connectionStatus = isConnecting
     ? 'Connecting...'
     : isConnected
@@ -97,146 +181,226 @@ export function RealtimeChart({
     ? 'text-green-500'
     : 'text-red-500'
 
+  const handleChartError = (error: Error, context: Record<string, any>) => {
+    const chartError = globalErrorHandler.createChartError(
+      'CHART_RENDER_ERROR',
+      'Chart rendering failed',
+      { ...context, error }
+    )
+    setChartError(chartError)
+  }
+
+  const renderChart = (
+    chartType: string,
+    dataKey: string,
+    title: string,
+    description: string,
+    height = 300,
+    yAxisId?: string,
+    additionalLines?: Array<{ dataKey: string; yAxisId?: string }>
+  ) => {
+    try {
+      return (
+        <ChartErrorBoundary>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{title}</CardTitle>
+                  <CardDescription>{description}</CardDescription>
+                </div>
+                {chartType === 'responseTime' && (
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <span className={`text-sm ${connectionColor}`}>{connectionStatus}</span>
+                    {chartHealth.isStale && (
+                      <span className="text-xs text-orange-500">
+                        Data stale ({Math.round(chartHealth.dataAge / 1000)}s)
+                      </span>
+                    )}
+                    {error && !isConnected && (
+                      <Button
+                        onClick={onReconnect}
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                      >
+                        Reconnect
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sanitizedData.length === 0 ? (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  <div className="text-center">
+                    <div className="text-sm">No data available</div>
+                    {chartError && (
+                      <div className="text-xs mt-1 text-red-500">
+                        {chartError.userMessage}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <ChartContainer config={chartConfig} className={`h-[${height}px]`}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart 
+                      data={sanitizedData} 
+                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      onError={(error) => handleChartError(error, { chartType, dataKey })}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="timestamp"
+                        tickFormatter={formatTimestamp}
+                        className="text-xs"
+                      />
+                      <YAxis yAxisId={yAxisId || 'left'} className="text-xs" />
+                      {additionalLines?.some(line => line.yAxisId === 'right') && (
+                        <YAxis yAxisId="right" orientation="right" className="text-xs" />
+                      )}
+                      <Tooltip content={<CustomTooltip />} />
+                      {additionalLines && <Legend />}
+                      <Line
+                        yAxisId={yAxisId || 'left'}
+                        type="monotone"
+                        dataKey={dataKey}
+                        stroke={chartConfig[dataKey as keyof typeof chartConfig]?.color}
+                        strokeWidth={2}
+                        dot={false}
+                        name={chartConfig[dataKey as keyof typeof chartConfig]?.label}
+                      />
+                      {additionalLines?.map((line, index) => (
+                        <Line
+                          key={index}
+                          yAxisId={line.yAxisId || 'left'}
+                          type="monotone"
+                          dataKey={line.dataKey}
+                          stroke={chartConfig[line.dataKey as keyof typeof chartConfig]?.color}
+                          strokeWidth={2}
+                          dot={false}
+                          name={chartConfig[line.dataKey as keyof typeof chartConfig]?.label}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
+        </ChartErrorBoundary>
+      )
+    } catch (error) {
+      handleChartError(error as Error, { chartType, dataKey })
+      return (
+        <Card className="border-red-200">
+          <CardContent className="pt-6">
+            <div className="text-center text-red-600">
+              <div className="text-sm">Chart rendering failed</div>
+              <Button
+                onClick={() => setChartError(null)}
+                size="sm"
+                variant="outline"
+                className="mt-2"
+              >
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Response Time Chart */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Response Time</CardTitle>
-              <CardDescription>Real-time response time measurements</CardDescription>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className={`text-sm ${connectionColor}`}>{connectionStatus}</span>
-              {error && !isConnected && (
-                <button
-                  onClick={onReconnect}
-                  className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  Reconnect
-                </button>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  dataKey="timestamp"
-                  tickFormatter={formatTimestamp}
-                  className="text-xs"
-                />
-                <YAxis className="text-xs" />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="responseTime"
-                  stroke={chartConfig.responseTime.color}
-                  strokeWidth={2}
-                  dot={false}
-                  name="Response Time (ms)"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+      {renderChart(
+        'responseTime',
+        'responseTime',
+        'Response Time',
+        'Real-time response time measurements',
+        300
+      )}
 
       {/* Requests Per Second Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Requests Per Second</CardTitle>
-          <CardDescription>Current throughput over time</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  dataKey="timestamp"
-                  tickFormatter={formatTimestamp}
-                  className="text-xs"
-                />
-                <YAxis className="text-xs" />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="requestsPerSecond"
-                  stroke={chartConfig.requestsPerSecond.color}
-                  strokeWidth={2}
-                  dot={false}
-                  name="Requests/sec"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+      {renderChart(
+        'requestsPerSecond',
+        'requestsPerSecond',
+        'Requests Per Second',
+        'Current throughput over time',
+        250
+      )}
 
       {/* Combined Metrics Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Combined Metrics</CardTitle>
-          <CardDescription>Success rate and active requests over time</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  dataKey="timestamp"
-                  tickFormatter={formatTimestamp}
-                  className="text-xs"
-                />
-                <YAxis yAxisId="left" className="text-xs" />
-                <YAxis yAxisId="right" orientation="right" className="text-xs" />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="successRate"
-                  stroke={chartConfig.successRate.color}
-                  strokeWidth={2}
-                  dot={false}
-                  name="Success Rate (%)"
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="activeRequests"
-                  stroke={chartConfig.activeRequests.color}
-                  strokeWidth={2}
-                  dot={false}
-                  name="Active Requests"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+      {renderChart(
+        'combined',
+        'successRate',
+        'Combined Metrics',
+        'Success rate and active requests over time',
+        300,
+        'left',
+        [{ dataKey: 'activeRequests', yAxisId: 'right' }]
+      )}
 
-      {error && (
+      {/* Error Display */}
+      {(error || chartError) && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-red-600">Connection Error</p>
-                <p className="text-xs text-red-500">{error}</p>
+              <div className="space-y-1">
+                <p className="text-sm text-red-600 font-medium">
+                  {error ? 'Connection Error' : 'Chart Error'}
+                </p>
+                <p className="text-xs text-red-500">
+                  {error?.userMessage || chartError?.userMessage}
+                </p>
+                {(error || chartError) && process.env.NODE_ENV === 'development' && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer">Technical Details</summary>
+                    <pre className="mt-1 p-2 bg-red-100 rounded text-xs">
+                      {JSON.stringify((error || chartError)?.toJSON(), null, 2)}
+                    </pre>
+                  </details>
+                )}
               </div>
-              <button
-                onClick={onReconnect}
-                className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
-              >
-                Retry Connection
-              </button>
+              <div className="flex gap-2">
+                {chartError && (
+                  <Button
+                    onClick={() => setChartError(null)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Clear Error
+                  </Button>
+                )}
+                {error && onReconnect && (
+                  <Button
+                    onClick={onReconnect}
+                    size="sm"
+                    variant="default"
+                  >
+                    Retry Connection
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Chart Health Status */}
+      {!chartHealth.hasData && !error && !chartError && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm text-yellow-600">Waiting for data...</p>
+              <p className="text-xs text-yellow-500 mt-1">
+                Charts will appear once metrics data is received
+              </p>
             </div>
           </CardContent>
         </Card>

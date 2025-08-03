@@ -5,9 +5,11 @@ import { ErrorSummary } from './ErrorSummary'
 import { RealtimeChart } from './RealtimeChart'
 import { ExportControls, TestResult } from './ExportControls'
 import { TestHistory } from './TestHistory'
+import { ErrorBoundary, ErrorNotificationContainer } from './ErrorBoundary'
 import { useRealtimeMetrics } from '../hooks/useRealtimeMetrics'
 import { useTestHistory, generateTestResultId } from '../hooks/useTestHistory'
 import { exportTestResult } from '../utils/exportUtils'
+import { useErrorHandler } from '../utils/errorHandling'
 
 interface MetricsSummary {
   totalRequests: number
@@ -51,6 +53,7 @@ export function MetricsDashboard({
 }: MetricsDashboardProps) {
   const [currentTestResult, setCurrentTestResult] = useState<TestResult | undefined>()
   const [showHistory, setShowHistory] = useState(false)
+  const { handleError } = useErrorHandler()
   
   const realtimeMetrics = useRealtimeMetrics({
     websocketUrl,
@@ -80,7 +83,11 @@ export function MetricsDashboard({
   }, [metrics, testConfig, isRunning, addResult])
 
   const handleExport = async (format: 'json' | 'csv', data: TestResult) => {
-    await exportTestResult(data, format)
+    try {
+      await exportTestResult(data, format)
+    } catch (error) {
+      handleError(error as Error, { operation: 'export', format, testId: data.id })
+    }
   }
 
   const handleCompareResults = (results: TestResult[]) => {
@@ -93,7 +100,9 @@ export function MetricsDashboard({
     setShowHistory(false)
   }
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <ErrorBoundary>
+      <div className="container mx-auto p-6 space-y-6">
+        <ErrorNotificationContainer />
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">HTTP Load Test Dashboard</h1>
         <div className="flex items-center space-x-2">
@@ -153,24 +162,30 @@ export function MetricsDashboard({
       {isRunning && (
         <div className="space-y-6">
           <h2 className="text-xl font-semibold">Real-time Metrics</h2>
-          <RealtimeChart
-            data={realtimeMetrics.metrics.dataPoints}
-            isConnected={realtimeMetrics.isConnected}
-            isConnecting={realtimeMetrics.isConnecting}
-            error={realtimeMetrics.error}
-            onReconnect={realtimeMetrics.reconnect}
-          />
+          <ErrorBoundary>
+            <RealtimeChart
+              data={realtimeMetrics.metrics.dataPoints}
+              isConnected={realtimeMetrics.isConnected}
+              isConnecting={realtimeMetrics.isConnecting}
+              error={realtimeMetrics.error}
+              onReconnect={realtimeMetrics.reconnect}
+            />
+          </ErrorBoundary>
         </div>
       )}
 
       {/* Detailed Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PercentileMetrics percentiles={metrics?.percentiles} />
-        <ErrorSummary 
-          statusCodes={metrics?.statusCodes} 
-          errors={metrics?.errors}
-          totalRequests={metrics?.totalRequests || 0}
-        />
+        <ErrorBoundary>
+          <PercentileMetrics percentiles={metrics?.percentiles} />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <ErrorSummary 
+            statusCodes={metrics?.statusCodes} 
+            errors={metrics?.errors}
+            totalRequests={metrics?.totalRequests || 0}
+          />
+        </ErrorBoundary>
       </div>
 
       {/* Export and History Section */}
@@ -196,21 +211,25 @@ export function MetricsDashboard({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ExportControls
-            currentResult={currentTestResult}
-            onExport={handleExport}
-          />
+          <ErrorBoundary>
+            <ExportControls
+              currentResult={currentTestResult}
+              onExport={handleExport}
+            />
+          </ErrorBoundary>
           
           {showHistory && (
-            <TestHistory
-              history={history}
-              onCompare={handleCompareResults}
-              onDelete={removeResult}
-              onView={handleViewResult}
-            />
+            <ErrorBoundary>
+              <TestHistory
+                history={history}
+                onCompare={handleCompareResults}
+                onDelete={removeResult}
+                onView={handleViewResult}
+              />
+            </ErrorBoundary>
           )}
         </div>
       </div>
-    </div>
+    </ErrorBoundary>
   )
 }

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"http-load-test/internal/errors"
+	"http-load-test/internal/logger"
 	"http-load-test/internal/metrics"
 	"http-load-test/internal/websocket"
 )
@@ -22,14 +24,16 @@ var staticFiles embed.FS
 
 // Server represents the HTTP server for the load testing application
 type Server struct {
-	httpServer   *http.Server
-	wsServer     *websocket.Server
-	metrics      *metrics.MetricsCollector
-	port         int
-	isRunning    bool
-	mutex        sync.RWMutex
-	testStatus   TestStatus
-	finalResults *metrics.MetricsSummary
+	httpServer     *http.Server
+	wsServer       *websocket.Server
+	metrics        *metrics.MetricsCollector
+	logger         *logger.Logger
+	errorCollector *errors.ErrorCollector
+	port           int
+	isRunning      bool
+	mutex          sync.RWMutex
+	testStatus     TestStatus
+	finalResults   *metrics.MetricsSummary
 }
 
 // TestStatus represents the current status of a load test
@@ -50,14 +54,20 @@ type APIResponse struct {
 }
 
 // NewServer creates a new HTTP server instance
-func NewServer(port int, metricsCollector *metrics.MetricsCollector) *Server {
-	wsServer := websocket.NewServer(metricsCollector)
+func NewServer(port int, metricsCollector *metrics.MetricsCollector, log *logger.Logger) *Server {
+	if log == nil {
+		log = logger.GetGlobalLogger().WithPrefix("http-server")
+	}
+
+	wsServer := websocket.NewServer(metricsCollector, log.WithPrefix("websocket"))
 
 	return &Server{
-		port:      port,
-		wsServer:  wsServer,
-		metrics:   metricsCollector,
-		isRunning: false,
+		port:           port,
+		wsServer:       wsServer,
+		metrics:        metricsCollector,
+		logger:         log,
+		errorCollector: errors.NewErrorCollector(200), // Keep last 200 errors
+		isRunning:      false,
 		testStatus: TestStatus{
 			IsRunning: false,
 		},
@@ -70,11 +80,17 @@ func (s *Server) Start() error {
 	defer s.mutex.Unlock()
 
 	if s.isRunning {
-		return fmt.Errorf("server is already running")
+		return errors.NewExecutionError("SERVER_RUNNING", "server is already running")
 	}
 
+	s.logger.Info("Starting HTTP server on port %d", s.port)
+
 	// Start WebSocket server
-	s.wsServer.Start()
+	if err := s.wsServer.Start(); err != nil {
+		loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_START_FAILED", "failed to start WebSocket server")
+		s.errorCollector.Add(loadTestErr)
+		return loadTestErr
+	}
 
 	// Create HTTP server with routes
 	mux := http.NewServeMux()
@@ -82,19 +98,22 @@ func (s *Server) Start() error {
 
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.port),
-		Handler:      s.corsMiddleware(s.securityMiddleware(mux)),
+		Handler:      s.corsMiddleware(s.securityMiddleware(s.errorMiddleware(mux))),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
+		ErrorLog:     s.createErrorLogger(),
 	}
 
 	s.isRunning = true
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("Starting HTTP server on port %d", s.port)
+		s.logger.Info("HTTP server listening on :%d", s.port)
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTP server error: %v", err)
+			loadTestErr := errors.Wrap(err, errors.SystemError, "HTTP_SERVER_ERROR", "HTTP server error")
+			s.errorCollector.Add(loadTestErr)
+			s.logger.Error("HTTP server error: %v", loadTestErr)
 		}
 	}()
 
@@ -107,22 +126,32 @@ func (s *Server) Stop() error {
 	defer s.mutex.Unlock()
 
 	if !s.isRunning {
+		s.logger.Debug("Server is not running, nothing to stop")
 		return nil
 	}
+
+	s.logger.Info("Stopping HTTP server")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Stop WebSocket server
-	s.wsServer.Close()
+	if err := s.wsServer.Close(); err != nil {
+		loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_STOP_FAILED", "failed to stop WebSocket server")
+		s.errorCollector.Add(loadTestErr)
+		s.logger.Warn("Error stopping WebSocket server: %v", loadTestErr)
+	}
 
 	// Stop HTTP server
 	if err := s.httpServer.Shutdown(ctx); err != nil {
-		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
+		loadTestErr := errors.Wrap(err, errors.SystemError, "HTTP_SHUTDOWN_FAILED", "failed to shutdown HTTP server")
+		s.errorCollector.Add(loadTestErr)
+		s.logger.Error("Failed to shutdown HTTP server: %v", loadTestErr)
+		return loadTestErr
 	}
 
 	s.isRunning = false
-	log.Println("HTTP server stopped")
+	s.logger.Info("HTTP server stopped successfully")
 	return nil
 }
 
@@ -187,6 +216,30 @@ func (s *Server) securityMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// errorMiddleware handles panics and logs errors
+func (s *Server) errorMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				s.logger.Error("Panic in HTTP handler: %v", err)
+				loadTestErr := errors.New(errors.InternalError, "HANDLER_PANIC", "internal server error")
+				s.errorCollector.Add(loadTestErr)
+				s.writeErrorResponse(w, http.StatusInternalServerError, "Internal server error")
+			}
+		}()
+
+		// Log request
+		s.logger.Debug("HTTP %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// createErrorLogger creates a logger for the HTTP server
+func (s *Server) createErrorLogger() *logger.Logger {
+	return s.logger.WithPrefix("http-server-error")
 }
 
 // handleStatus handles GET /api/status requests
@@ -488,4 +541,14 @@ func (s *Server) IsRunning() bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.isRunning
+}
+
+// GetErrorSummary returns a summary of server errors
+func (s *Server) GetErrorSummary() *errors.ErrorSummary {
+	return s.errorCollector.GetSummary()
+}
+
+// SetLogger updates the logger instance
+func (s *Server) SetLogger(log *logger.Logger) {
+	s.logger = log
 }

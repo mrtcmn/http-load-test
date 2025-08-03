@@ -4,11 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
+	"http-load-test/internal/errors"
+	"http-load-test/internal/logger"
 	"http-load-test/internal/metrics"
 
 	"github.com/gorilla/websocket"
@@ -24,10 +26,12 @@ type Connection struct {
 
 // Server manages WebSocket connections and metrics broadcasting
 type Server struct {
-	connections map[string]*Connection
-	mutex       sync.RWMutex
-	upgrader    websocket.Upgrader
-	metrics     *metrics.MetricsCollector
+	connections    map[string]*Connection
+	mutex          sync.RWMutex
+	upgrader       websocket.Upgrader
+	metrics        *metrics.MetricsCollector
+	logger         *logger.Logger
+	errorCollector *errors.ErrorCollector
 
 	// Channels for connection management
 	register   chan *Connection
@@ -38,10 +42,19 @@ type Server struct {
 	pingInterval time.Duration
 	pongWait     time.Duration
 	writeWait    time.Duration
+
+	// State
+	isRunning bool
 }
 
 // NewServer creates a new WebSocket server
-func NewServer(metricsCollector *metrics.MetricsCollector) *Server {
+func NewServer(metricsCollector *metrics.MetricsCollector, log *logger.Logger) *Server {
+	if log == nil {
+		log = logger.GetGlobalLogger().WithPrefix("websocket")
+	}
+
+	log.Debug("Creating WebSocket server")
+
 	return &Server{
 		connections: make(map[string]*Connection),
 		upgrader: websocket.Upgrader{
@@ -53,19 +66,32 @@ func NewServer(metricsCollector *metrics.MetricsCollector) *Server {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		},
-		metrics:      metricsCollector,
-		register:     make(chan *Connection),
-		unregister:   make(chan *Connection),
-		broadcast:    make(chan []byte),
-		pingInterval: 54 * time.Second,
-		pongWait:     60 * time.Second,
-		writeWait:    10 * time.Second,
+		metrics:        metricsCollector,
+		logger:         log,
+		errorCollector: errors.NewErrorCollector(100), // Keep last 100 errors
+		register:       make(chan *Connection),
+		unregister:     make(chan *Connection),
+		broadcast:      make(chan []byte),
+		pingInterval:   54 * time.Second,
+		pongWait:       60 * time.Second,
+		writeWait:      10 * time.Second,
+		isRunning:      false,
 	}
 }
 
 // Start begins the WebSocket server hub
-func (s *Server) Start() {
+func (s *Server) Start() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.isRunning {
+		return errors.NewWebSocketError("WS_ALREADY_RUNNING", "WebSocket server is already running")
+	}
+
+	s.logger.Info("Starting WebSocket server")
+	s.isRunning = true
 	go s.run()
+	return nil
 }
 
 // run handles the main server loop for connection management
@@ -96,7 +122,7 @@ func (s *Server) registerConnection(conn *Connection) {
 	defer s.mutex.Unlock()
 
 	s.connections[conn.id] = conn
-	log.Printf("WebSocket connection registered: %s (total: %d)", conn.id, len(s.connections))
+	s.logger.Info("WebSocket connection registered: %s (total: %d)", conn.id, len(s.connections))
 }
 
 // unregisterConnection removes a connection from the pool
@@ -107,8 +133,10 @@ func (s *Server) unregisterConnection(conn *Connection) {
 	if _, exists := s.connections[conn.id]; exists {
 		delete(s.connections, conn.id)
 		close(conn.send)
-		conn.conn.Close()
-		log.Printf("WebSocket connection unregistered: %s (total: %d)", conn.id, len(s.connections))
+		if err := conn.conn.Close(); err != nil {
+			s.logger.Warn("Error closing WebSocket connection %s: %v", conn.id, err)
+		}
+		s.logger.Info("WebSocket connection unregistered: %s (total: %d)", conn.id, len(s.connections))
 	}
 }
 
@@ -124,8 +152,15 @@ func (s *Server) broadcastMessage(message []byte) {
 			// Connection is blocked, remove it
 			delete(s.connections, id)
 			close(conn.send)
-			conn.conn.Close()
-			log.Printf("WebSocket connection removed due to blocking: %s", id)
+			if err := conn.conn.Close(); err != nil {
+				s.logger.Warn("Error closing blocked WebSocket connection %s: %v", id, err)
+			}
+			s.logger.Warn("WebSocket connection removed due to blocking: %s", id)
+
+			// Record the error
+			loadTestErr := errors.NewWebSocketError("CONN_BLOCKED", "WebSocket connection blocked and removed").
+				WithContext("connection_id", id)
+			s.errorCollector.Add(loadTestErr)
 		}
 	}
 }
@@ -151,14 +186,21 @@ func (s *Server) pingConnections() {
 
 // HandleWebSocket handles WebSocket upgrade requests
 func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	s.logger.Debug("WebSocket upgrade request from %s", r.RemoteAddr)
+
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_UPGRADE_FAILED", "WebSocket upgrade failed").
+			WithContext("remote_addr", r.RemoteAddr).
+			WithContext("user_agent", r.UserAgent())
+		s.errorCollector.Add(loadTestErr)
+		s.logger.Error("WebSocket upgrade failed: %v", loadTestErr)
 		return
 	}
 
 	// Generate unique connection ID
 	connID := generateConnectionID()
+	s.logger.Debug("Generated connection ID: %s", connID)
 
 	// Create connection wrapper
 	wsConn := &Connection{
@@ -169,7 +211,14 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register the connection
-	s.register <- wsConn
+	select {
+	case s.register <- wsConn:
+		s.logger.Debug("Connection %s queued for registration", connID)
+	default:
+		s.logger.Error("Failed to queue connection %s for registration", connID)
+		conn.Close()
+		return
+	}
 
 	// Start goroutines for reading and writing
 	go s.writePump(wsConn)
@@ -179,11 +228,17 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 // readPump handles reading from the WebSocket connection
 func (s *Server) readPump(conn *Connection) {
 	defer func() {
-		s.unregister <- conn
+		s.logger.Debug("Read pump for connection %s stopping", conn.id)
+		select {
+		case s.unregister <- conn:
+		default:
+			s.logger.Warn("Failed to unregister connection %s", conn.id)
+		}
 	}()
 
 	conn.conn.SetReadDeadline(time.Now().Add(s.pongWait))
 	conn.conn.SetPongHandler(func(string) error {
+		s.logger.Debug("Received pong from connection %s", conn.id)
 		conn.conn.SetReadDeadline(time.Now().Add(s.pongWait))
 		return nil
 	})
@@ -192,10 +247,17 @@ func (s *Server) readPump(conn *Connection) {
 		_, _, err := conn.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_UNEXPECTED_CLOSE", "WebSocket unexpected close").
+					WithContext("connection_id", conn.id)
+				s.errorCollector.Add(loadTestErr)
+				s.logger.Error("WebSocket unexpected close for connection %s: %v", conn.id, loadTestErr)
+			} else {
+				s.logger.Debug("WebSocket connection %s closed normally: %v", conn.id, err)
 			}
 			break
 		}
+		// We don't expect to receive messages from clients in this implementation
+		s.logger.Debug("Received message from connection %s (ignoring)", conn.id)
 	}
 }
 
@@ -203,8 +265,11 @@ func (s *Server) readPump(conn *Connection) {
 func (s *Server) writePump(conn *Connection) {
 	ticker := time.NewTicker(s.pingInterval)
 	defer func() {
+		s.logger.Debug("Write pump for connection %s stopping", conn.id)
 		ticker.Stop()
-		conn.conn.Close()
+		if err := conn.conn.Close(); err != nil {
+			s.logger.Warn("Error closing connection %s in write pump: %v", conn.id, err)
+		}
 	}()
 
 	for {
@@ -212,15 +277,31 @@ func (s *Server) writePump(conn *Connection) {
 		case message, ok := <-conn.send:
 			conn.conn.SetWriteDeadline(time.Now().Add(s.writeWait))
 			if !ok {
-				conn.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				// Channel closed, send close message
+				s.logger.Debug("Send channel closed for connection %s", conn.id)
+				if err := conn.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					s.logger.Warn("Error sending close message to connection %s: %v", conn.id, err)
+				}
 				return
 			}
 
 			w, err := conn.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
+				loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_WRITE_FAILED", "Failed to get WebSocket writer").
+					WithContext("connection_id", conn.id)
+				s.errorCollector.Add(loadTestErr)
+				s.logger.Error("Failed to get writer for connection %s: %v", conn.id, loadTestErr)
 				return
 			}
-			w.Write(message)
+
+			if _, err := w.Write(message); err != nil {
+				loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_MESSAGE_WRITE_FAILED", "Failed to write WebSocket message").
+					WithContext("connection_id", conn.id)
+				s.errorCollector.Add(loadTestErr)
+				s.logger.Error("Failed to write message to connection %s: %v", conn.id, loadTestErr)
+				w.Close()
+				return
+			}
 
 			// Add queued messages to the current message
 			n := len(conn.send)
@@ -230,14 +311,23 @@ func (s *Server) writePump(conn *Connection) {
 			}
 
 			if err := w.Close(); err != nil {
+				loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_WRITER_CLOSE_FAILED", "Failed to close WebSocket writer").
+					WithContext("connection_id", conn.id)
+				s.errorCollector.Add(loadTestErr)
+				s.logger.Error("Failed to close writer for connection %s: %v", conn.id, loadTestErr)
 				return
 			}
 
 		case <-ticker.C:
 			conn.conn.SetWriteDeadline(time.Now().Add(s.writeWait))
 			if err := conn.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				loadTestErr := errors.Wrap(err, errors.WebSocketError, "WS_PING_FAILED", "Failed to send WebSocket ping").
+					WithContext("connection_id", conn.id)
+				s.errorCollector.Add(loadTestErr)
+				s.logger.Error("Failed to send ping to connection %s: %v", conn.id, loadTestErr)
 				return
 			}
+			s.logger.Debug("Sent ping to connection %s", conn.id)
 		}
 	}
 }
@@ -245,6 +335,7 @@ func (s *Server) writePump(conn *Connection) {
 // BroadcastMetrics sends real-time metrics to all connected clients
 func (s *Server) BroadcastMetrics() {
 	if s.metrics == nil {
+		s.logger.Warn("No metrics collector available for broadcast")
 		return
 	}
 
@@ -258,15 +349,20 @@ func (s *Server) BroadcastMetrics() {
 
 	data, err := json.Marshal(message)
 	if err != nil {
-		log.Printf("Error marshaling metrics: %v", err)
+		loadTestErr := errors.Wrap(err, errors.WebSocketError, "METRICS_MARSHAL_FAILED", "Failed to marshal metrics message")
+		s.errorCollector.Add(loadTestErr)
+		s.logger.Error("Error marshaling metrics: %v", loadTestErr)
 		return
 	}
 
 	select {
 	case s.broadcast <- data:
+		s.logger.Debug("Metrics broadcast queued")
 	default:
 		// Broadcast channel is full, skip this update
-		log.Printf("Broadcast channel full, skipping metrics update")
+		s.logger.Warn("Broadcast channel full, skipping metrics update")
+		loadTestErr := errors.NewWebSocketError("BROADCAST_CHANNEL_FULL", "Broadcast channel is full, metrics update skipped")
+		s.errorCollector.Add(loadTestErr)
 	}
 }
 
@@ -280,14 +376,19 @@ func (s *Server) BroadcastTestComplete(summary metrics.MetricsSummary) {
 
 	data, err := json.Marshal(message)
 	if err != nil {
-		log.Printf("Error marshaling test complete message: %v", err)
+		loadTestErr := errors.Wrap(err, errors.WebSocketError, "TEST_COMPLETE_MARSHAL_FAILED", "Failed to marshal test complete message")
+		s.errorCollector.Add(loadTestErr)
+		s.logger.Error("Error marshaling test complete message: %v", loadTestErr)
 		return
 	}
 
 	select {
 	case s.broadcast <- data:
+		s.logger.Info("Test complete message broadcast queued")
 	default:
-		log.Printf("Broadcast channel full, skipping test complete message")
+		s.logger.Warn("Broadcast channel full, skipping test complete message")
+		loadTestErr := errors.NewWebSocketError("BROADCAST_CHANNEL_FULL", "Broadcast channel is full, test complete message skipped")
+		s.errorCollector.Add(loadTestErr)
 	}
 }
 
@@ -301,14 +402,19 @@ func (s *Server) BroadcastError(errorMsg string) {
 
 	data, err := json.Marshal(message)
 	if err != nil {
-		log.Printf("Error marshaling error message: %v", err)
+		loadTestErr := errors.Wrap(err, errors.WebSocketError, "ERROR_MARSHAL_FAILED", "Failed to marshal error message")
+		s.errorCollector.Add(loadTestErr)
+		s.logger.Error("Error marshaling error message: %v", loadTestErr)
 		return
 	}
 
 	select {
 	case s.broadcast <- data:
+		s.logger.Info("Error message broadcast queued: %s", errorMsg)
 	default:
-		log.Printf("Broadcast channel full, skipping error message")
+		s.logger.Warn("Broadcast channel full, skipping error message")
+		loadTestErr := errors.NewWebSocketError("BROADCAST_CHANNEL_FULL", "Broadcast channel is full, error message skipped")
+		s.errorCollector.Add(loadTestErr)
 	}
 }
 
@@ -320,23 +426,59 @@ func (s *Server) GetConnectionCount() int {
 }
 
 // Close shuts down the WebSocket server
-func (s *Server) Close() {
+func (s *Server) Close() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	for _, conn := range s.connections {
-		conn.conn.Close()
+	if !s.isRunning {
+		s.logger.Debug("WebSocket server is not running, nothing to close")
+		return nil
+	}
+
+	s.logger.Info("Closing WebSocket server")
+	s.isRunning = false
+
+	// Close all connections
+	for id, conn := range s.connections {
+		s.logger.Debug("Closing WebSocket connection: %s", id)
+		if err := conn.conn.Close(); err != nil {
+			s.logger.Warn("Error closing WebSocket connection %s: %v", id, err)
+		}
 		close(conn.send)
 	}
 
+	// Close channels
 	close(s.register)
 	close(s.unregister)
 	close(s.broadcast)
+
+	s.logger.Info("WebSocket server closed successfully")
+	return nil
+}
+
+// GetErrorSummary returns a summary of WebSocket errors
+func (s *Server) GetErrorSummary() *errors.ErrorSummary {
+	return s.errorCollector.GetSummary()
+}
+
+// IsRunning returns whether the WebSocket server is running
+func (s *Server) IsRunning() bool {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.isRunning
+}
+
+// SetLogger updates the logger instance
+func (s *Server) SetLogger(log *logger.Logger) {
+	s.logger = log
 }
 
 // generateConnectionID creates a unique connection identifier
 func generateConnectionID() string {
 	bytes := make([]byte, 8)
-	rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to timestamp-based ID if random fails
+		return fmt.Sprintf("conn_%d", time.Now().UnixNano())
+	}
 	return hex.EncodeToString(bytes)
 }

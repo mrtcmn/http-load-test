@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"http-load-test/internal/errors"
+	"http-load-test/internal/logger"
 	"io"
 	"net/http"
 	"time"
@@ -36,12 +38,18 @@ type RequestResult struct {
 
 // HTTPClient handles HTTP request execution with precise timing measurements
 type HTTPClient struct {
-	client *http.Client
-	config *TestConfig
+	client         *http.Client
+	config         *TestConfig
+	logger         *logger.Logger
+	errorCollector *errors.ErrorCollector
 }
 
 // NewHTTPClient creates a new HTTPClient with the given configuration
-func NewHTTPClient(config *TestConfig) *HTTPClient {
+func NewHTTPClient(config *TestConfig, log *logger.Logger) *HTTPClient {
+	if log == nil {
+		log = logger.GetGlobalLogger().WithPrefix("http-client")
+	}
+
 	client := &http.Client{
 		Timeout: config.Timeout,
 		Transport: &http.Transport{
@@ -51,58 +59,95 @@ func NewHTTPClient(config *TestConfig) *HTTPClient {
 		},
 	}
 
+	log.Debug("Created HTTP client with timeout: %v", config.Timeout)
+
 	return &HTTPClient{
-		client: client,
-		config: config,
+		client:         client,
+		config:         config,
+		logger:         log,
+		errorCollector: errors.NewErrorCollector(100), // Keep last 100 errors
 	}
 }
 
 // ExecuteRequest executes a single HTTP request with microsecond-precision timing
 func (c *HTTPClient) ExecuteRequest(ctx context.Context) *RequestResult {
 	result := &RequestResult{}
-	
+
 	// Record start time with microsecond precision
 	result.StartTime = time.Now()
-	
+
 	// Create HTTP request
 	req, err := c.createRequest(ctx)
 	if err != nil {
 		result.EndTime = time.Now()
 		result.Duration = result.EndTime.Sub(result.StartTime)
-		result.Error = fmt.Sprintf("failed to create request: %v", err)
+
+		// Categorize and log the error
+		loadTestErr := errors.CategorizeError(err)
+		c.errorCollector.Add(loadTestErr)
+		c.logger.Error("Failed to create request: %v", loadTestErr)
+
+		result.Error = loadTestErr.Error()
 		result.Success = false
 		return result
 	}
-	
+
+	c.logger.Debug("Executing request to %s", req.URL.String())
+
 	// Execute the request
 	resp, err := c.client.Do(req)
 	if err != nil {
 		result.EndTime = time.Now()
 		result.Duration = result.EndTime.Sub(result.StartTime)
-		result.Error = fmt.Sprintf("request failed: %v", err)
+
+		// Categorize and log the error
+		loadTestErr := errors.CategorizeError(err).
+			WithContext("url", c.config.URL).
+			WithContext("method", c.config.Method)
+		c.errorCollector.Add(loadTestErr)
+		c.logger.Error("Request failed: %v", loadTestErr)
+
+		result.Error = loadTestErr.Error()
 		result.Success = false
 		return result
 	}
-	defer resp.Body.Close()
-	
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Warn("Failed to close response body: %v", closeErr)
+		}
+	}()
+
 	// Record end time immediately after response
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
 	result.StatusCode = resp.StatusCode
-	
+
+	c.logger.Debug("Received response: status=%d, duration=%v", resp.StatusCode, result.Duration)
+
 	// Read response body to get size
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		result.Error = fmt.Sprintf("failed to read response body: %v", err)
+		loadTestErr := errors.CategorizeError(err).
+			WithContext("url", c.config.URL).
+			WithContext("status_code", fmt.Sprintf("%d", resp.StatusCode))
+		c.errorCollector.Add(loadTestErr)
+		c.logger.Error("Failed to read response body: %v", loadTestErr)
+
+		result.Error = loadTestErr.Error()
 		result.Success = false
 		return result
 	}
-	
+
 	result.ResponseSize = int64(len(body))
-	
+
 	// Determine success based on status code (2xx range)
 	result.Success = resp.StatusCode >= 200 && resp.StatusCode < 300
-	
+
+	// Log non-2xx responses as warnings
+	if !result.Success {
+		c.logger.Warn("Non-success response: status=%d, url=%s", resp.StatusCode, c.config.URL)
+	}
+
 	return result
 }
 
@@ -112,22 +157,22 @@ func (c *HTTPClient) createRequest(ctx context.Context) (*http.Request, error) {
 	if c.config.Body != "" {
 		body = bytes.NewBufferString(c.config.Body)
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, c.config.Method, c.config.URL, body)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Add custom headers
 	for key, value := range c.config.Headers {
 		req.Header.Set(key, value)
 	}
-	
+
 	// Set default Content-Type if not specified and body is present
 	if c.config.Body != "" && req.Header.Get("Content-Type") == "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	
+
 	return req, nil
 }
 
@@ -140,4 +185,20 @@ func (c *HTTPClient) SetTimeout(timeout time.Duration) {
 // GetConfig returns the current configuration
 func (c *HTTPClient) GetConfig() *TestConfig {
 	return c.config
+}
+
+// GetErrorSummary returns a summary of collected errors
+func (c *HTTPClient) GetErrorSummary() *errors.ErrorSummary {
+	return c.errorCollector.GetSummary()
+}
+
+// ResetErrors clears all collected errors
+func (c *HTTPClient) ResetErrors() {
+	c.errorCollector.Reset()
+	c.logger.Debug("Reset error collector")
+}
+
+// SetLogger updates the logger instance
+func (c *HTTPClient) SetLogger(log *logger.Logger) {
+	c.logger = log
 }
