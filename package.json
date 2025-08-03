@@ -7,7 +7,8 @@
     "http-load-test": "./bin/http-load-test.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node test/binary-manager.test.js",
+    "test:binary": "node test/binary-manager.test.js",
     "publish": "npm publish",
     "build": "make build",
     "build:web": "cd web && npm run build",
