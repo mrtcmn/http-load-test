@@ -2,7 +2,7 @@
 
 - [x] 1. Set up project structure and Go module initialization
   - Create Go module with proper directory structure (cmd/, internal/, web/)
-  - Initialize package.json with updated dependencies for Vue.js and build tools
+  - Initialize package.json with updated dependencies for TanStack Start and build tools
   - Set up basic Makefile for cross-platform binary compilation
   - Create .gitignore for Go binaries and Node.js artifacts
   - _Requirements: 6.3, 6.4_
@@ -62,7 +62,7 @@
 - [x] 5. Build web server and REST API
   - [x] 5.1 Create HTTP server with static file serving
     - Implement HTTP server with embedded static assets
-    - Add routes for serving Vue.js application
+    - Add routes for serving TanStack Start application
     - Create middleware for CORS and security headers
     - Write tests for web server functionality
     - _Requirements: 4.1, 4.2_
@@ -74,30 +74,30 @@
     - Write API integration tests
     - _Requirements: 4.5, 7.4_
 
-- [ ] 6. Develop Vue.js frontend application
-  - [ ] 6.1 Set up Vue.js project with Tailwind and shadcn/ui
-    - Initialize Vue.js project with Vite build system
+- [-] 6. Develop TanStack Start frontend application
+  - [x] 6.1 Set up TanStack Start project with Tailwind and shadcn/ui
+    - Initialize TanStack Start project with React and TypeScript
     - Configure Tailwind CSS and shadcn/ui components
-    - Set up Pinia store for state management
-    - Create basic project structure and routing
+    - Set up TanStack Query for state management and data fetching
+    - Create basic project structure and file-based routing
     - _Requirements: 4.2, 4.3, 5.1, 5.2_
 
-  - [ ] 6.2 Create metrics dashboard components
-    - Build MetricsDashboard.vue as main layout component
-    - Implement PercentileMetrics.vue for p50/p95/p99 display
-    - Create ErrorSummary.vue for error categorization
-    - Write component unit tests
+  - [x] 6.2 Create metrics dashboard components
+    - Build MetricsDashboard component as main layout
+    - Implement PercentileMetrics component for p50/p95/p99 display
+    - Create ErrorSummary component for error categorization
+    - Write component unit tests with Vitest
     - _Requirements: 4.3, 5.3, 3.1, 3.4_
 
   - [ ] 6.3 Implement real-time chart components
-    - Create RealtimeChart.vue using shadcn/ui Chart components
-    - Implement WebSocket connection management composable
+    - Create RealtimeChart component using shadcn/ui Chart components
+    - Implement WebSocket connection management with React hooks
     - Add real-time data processing and chart updates
     - Write tests for chart components and real-time updates
     - _Requirements: 4.4, 5.1, 5.2_
 
   - [ ] 6.4 Build export and history functionality
-    - Create ExportControls.vue for data export options
+    - Create ExportControls component for data export options
     - Implement CSV and JSON export functionality
     - Add test history view and result comparison
     - Write tests for export functionality
