@@ -1,9 +1,13 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { PercentileMetrics } from './PercentileMetrics'
 import { ErrorSummary } from './ErrorSummary'
 import { RealtimeChart } from './RealtimeChart'
+import { ExportControls, TestResult } from './ExportControls'
+import { TestHistory } from './TestHistory'
 import { useRealtimeMetrics } from '../hooks/useRealtimeMetrics'
+import { useTestHistory, generateTestResultId } from '../hooks/useTestHistory'
+import { exportTestResult } from '../utils/exportUtils'
 
 interface MetricsSummary {
   totalRequests: number
@@ -30,17 +34,64 @@ interface MetricsDashboardProps {
   metrics?: MetricsSummary
   isRunning?: boolean
   websocketUrl?: string
+  testConfig?: {
+    url: string
+    method: string
+    totalRequests: number
+    requestsPerSecond: number
+    concurrentRequests: number
+  }
 }
 
 export function MetricsDashboard({ 
   metrics, 
   isRunning = false, 
-  websocketUrl = 'ws://localhost:8080/ws/metrics' 
+  websocketUrl = 'ws://localhost:8080/ws/metrics',
+  testConfig
 }: MetricsDashboardProps) {
+  const [currentTestResult, setCurrentTestResult] = useState<TestResult | undefined>()
+  const [showHistory, setShowHistory] = useState(false)
+  
   const realtimeMetrics = useRealtimeMetrics({
     websocketUrl,
     maxDataPoints: 100,
   })
+  
+  const { 
+    history, 
+    addResult, 
+    removeResult, 
+    clearHistory,
+    getResult 
+  } = useTestHistory()
+
+  // Convert metrics to TestResult format when test completes
+  useEffect(() => {
+    if (metrics && testConfig && !isRunning) {
+      const testResult: TestResult = {
+        id: generateTestResultId(testConfig),
+        timestamp: Date.now(),
+        config: testConfig,
+        metrics: metrics
+      }
+      setCurrentTestResult(testResult)
+      addResult(testResult)
+    }
+  }, [metrics, testConfig, isRunning, addResult])
+
+  const handleExport = async (format: 'json' | 'csv', data: TestResult) => {
+    await exportTestResult(data, format)
+  }
+
+  const handleCompareResults = (results: TestResult[]) => {
+    console.log('Comparing results:', results)
+    // This could open a detailed comparison view
+  }
+
+  const handleViewResult = (result: TestResult) => {
+    setCurrentTestResult(result)
+    setShowHistory(false)
+  }
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -120,6 +171,45 @@ export function MetricsDashboard({
           errors={metrics?.errors}
           totalRequests={metrics?.totalRequests || 0}
         />
+      </div>
+
+      {/* Export and History Section */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Export & History</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showHistory ? 'Hide History' : 'Show History'} ({history.length})
+            </button>
+            {history.length > 0 && (
+              <button
+                onClick={clearHistory}
+                className="text-sm text-red-600 hover:text-red-700 transition-colors"
+              >
+                Clear All
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ExportControls
+            currentResult={currentTestResult}
+            onExport={handleExport}
+          />
+          
+          {showHistory && (
+            <TestHistory
+              history={history}
+              onCompare={handleCompareResults}
+              onDelete={removeResult}
+              onView={handleViewResult}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

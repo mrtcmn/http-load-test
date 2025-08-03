@@ -41,5 +41,19 @@ function HomeComponent() {
     },
   }
 
-  return <MetricsDashboard metrics={mockMetrics} isRunning={false} />
+  const mockTestConfig = {
+    url: 'https://api.example.com/test',
+    method: 'GET',
+    totalRequests: 1000,
+    requestsPerSecond: 50,
+    concurrentRequests: 10,
+  }
+
+  return (
+    <MetricsDashboard 
+      metrics={mockMetrics} 
+      isRunning={false} 
+      testConfig={mockTestConfig}
+    />
+  )
 }

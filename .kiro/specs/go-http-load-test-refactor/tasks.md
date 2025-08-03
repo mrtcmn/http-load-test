@@ -96,7 +96,7 @@
     - Write tests for chart components and real-time updates
     - _Requirements: 4.4, 5.1, 5.2_
 
-  - [ ] 6.4 Build export and history functionality
+  - [x] 6.4 Build export and history functionality
     - Create ExportControls component for data export options
     - Implement CSV and JSON export functionality
     - Add test history view and result comparison
