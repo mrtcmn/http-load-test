@@ -74,18 +74,42 @@ deps:
 build-dev: clean
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/http-load-test
 
+# Build all platforms using script
+.PHONY: build-all-script
+build-all-script:
+	./scripts/build-all.sh
+
+# Generate checksums for built binaries
+.PHONY: checksums
+checksums:
+	./scripts/generate-checksums.sh
+
+# Prepare release package
+.PHONY: release
+release:
+	./scripts/prepare-release.sh $(VERSION)
+
+# Build and prepare release in one step
+.PHONY: release-build
+release-build: clean
+	./scripts/prepare-release.sh $(VERSION)
+
 # Help target
 .PHONY: help
 help:
 	@echo "Available targets:"
-	@echo "  all          - Clean and build for current platform"
-	@echo "  build        - Build for current platform"
-	@echo "  build-all    - Build for all supported platforms"
-	@echo "  build-linux  - Build for Linux (amd64)"
-	@echo "  build-darwin - Build for macOS (amd64)"
-	@echo "  build-windows- Build for Windows (amd64)"
-	@echo "  test         - Run Go tests"
-	@echo "  run          - Run the application"
-	@echo "  clean        - Clean build artifacts"
-	@echo "  deps         - Install/update dependencies"
-	@echo "  help         - Show this help message"
+	@echo "  all              - Clean and build for current platform"
+	@echo "  build            - Build for current platform"
+	@echo "  build-all        - Build for all supported platforms (Makefile)"
+	@echo "  build-all-script - Build for all platforms using script"
+	@echo "  build-linux      - Build for Linux (amd64)"
+	@echo "  build-darwin     - Build for macOS (amd64)"
+	@echo "  build-windows    - Build for Windows (amd64)"
+	@echo "  checksums        - Generate checksums for built binaries"
+	@echo "  release          - Prepare release package (set VERSION=x.x.x)"
+	@echo "  release-build    - Clean, build, and prepare release"
+	@echo "  test             - Run Go tests"
+	@echo "  run              - Run the application"
+	@echo "  clean            - Clean build artifacts"
+	@echo "  deps             - Install/update dependencies"
+	@echo "  help             - Show this help message"

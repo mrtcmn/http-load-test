@@ -9,6 +9,8 @@
   "scripts": {
     "test": "node test/binary-manager.test.js",
     "test:binary": "node test/binary-manager.test.js",
+    "test:verification": "node test/binary-verification.test.js",
+    "test:all": "npm run test && npm run test:verification",
     "publish": "npm publish",
     "build": "make build",
     "build:web": "cd web && npm run build",

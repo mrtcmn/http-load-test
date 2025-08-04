@@ -1,0 +1,73 @@
+{
+  "name": "http-load-test",
+  "description": "HTTP Load Testing Tool with Go Engine",
+  "version": "0.3.0",
+  "platforms": {
+    "linux": {
+      "amd64": {
+        "enabled": true,
+        "cgo": false,
+        "ldflags": "-s -w"
+      },
+      "arm64": {
+        "enabled": true,
+        "cgo": false,
+        "ldflags": "-s -w"
+      }
+    },
+    "darwin": {
+      "amd64": {
+        "enabled": true,
+        "cgo": false,
+        "ldflags": "-s -w"
+      },
+      "arm64": {
+        "enabled": true,
+        "cgo": false,
+        "ldflags": "-s -w"
+      }
+    },
+    "windows": {
+      "amd64": {
+        "enabled": true,
+        "cgo": false,
+        "ldflags": "-s -w",
+        "extension": ".exe"
+      }
+    }
+  },
+  "build": {
+    "source": "./cmd/http-load-test",
+    "output_dir": "bin",
+    "checksum_algorithm": "sha256",
+    "compression": "none"
+  },
+  "release": {
+    "github": {
+      "owner": "mrtcmn",
+      "repo": "http-load-test",
+      "draft": false,
+      "prerelease": false
+    },
+    "npm": {
+      "registry": "https://registry.npmjs.org",
+      "access": "public"
+    },
+    "assets": [
+      "bin/http-load-test-*",
+      "bin/checksums.*",
+      "bin/verify.sh",
+      "web-assets.tar.gz"
+    ]
+  },
+  "signing": {
+    "enabled": false,
+    "method": "gpg",
+    "key_id": null
+  },
+  "verification": {
+    "checksum": true,
+    "signature": false,
+    "virus_scan": false
+  }
+}
