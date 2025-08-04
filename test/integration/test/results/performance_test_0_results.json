@@ -1,0 +1,16 @@
+{
+  "goResult": {
+    "implementation": "Go",
+    "totalRequests": 50,
+    "successfulRequests": 50,
+    "duration": 2501751667,
+    "requestsPerSecond": 19.985996475804487,
+    "avgResponseTime": 469910,
+    "p95ResponseTime": 715273,
+    "p99ResponseTime": 989284,
+    "memoryUsage": 449184,
+    "cpuTime": 2501788083
+  },
+  "javascriptResult": null,
+  "improvement": null
+}

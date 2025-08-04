@@ -58,6 +58,40 @@ build-windows:
 test:
 	go test -v ./...
 
+# Run integration tests
+.PHONY: test-integration
+test-integration:
+	go run test/runner/run_integration_tests.go -suite=all
+
+# Run basic integration tests
+.PHONY: test-integration-basic
+test-integration-basic:
+	go run test/runner/run_integration_tests.go -suite=basic
+
+# Run advanced integration tests
+.PHONY: test-integration-advanced
+test-integration-advanced:
+	go run test/runner/run_integration_tests.go -suite=advanced
+
+# Run performance tests
+.PHONY: test-performance
+test-performance:
+	go run test/runner/run_integration_tests.go -suite=performance
+
+# Run cross-platform tests
+.PHONY: test-cross-platform
+test-cross-platform:
+	go run test/runner/run_integration_tests.go -suite=cross-platform
+
+# Run benchmarks
+.PHONY: benchmark
+benchmark:
+	go run test/runner/run_integration_tests.go -suite=benchmark
+
+# Run all tests (unit + integration)
+.PHONY: test-all
+test-all: test test-integration
+
 # Run Go code
 .PHONY: run
 run:

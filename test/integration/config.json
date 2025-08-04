@@ -1,0 +1,42 @@
+{
+  "testServer": {
+    "port": 8081,
+    "defaultDelay": 0,
+    "defaultStatusCode": 200,
+    "enableLogging": false
+  },
+  "performanceTestServer": {
+    "port": 8082,
+    "defaultDelay": 0,
+    "defaultStatusCode": 200,
+    "enableLogging": false
+  },
+  "benchmarkTestServer": {
+    "port": 8083,
+    "defaultDelay": 0,
+    "defaultStatusCode": 200,
+    "enableLogging": false
+  },
+  "testTimeouts": {
+    "basic": "5m",
+    "advanced": "10m",
+    "performance": "15m",
+    "crossPlatform": "10m",
+    "benchmark": "20m"
+  },
+  "performanceThresholds": {
+    "minSuccessRate": 0.95,
+    "minThroughputRatio": 0.8,
+    "maxP95ResponseTime": "1s",
+    "minGoVsJsImprovement": 1.5,
+    "minResponseTimeImprovement": 10.0
+  },
+  "crossPlatform": {
+    "supportedPlatforms": [
+      {"goos": "linux", "goarch": "amd64"},
+      {"goos": "darwin", "goarch": "amd64"},
+      {"goos": "darwin", "goarch": "arm64"},
+      {"goos": "windows", "goarch": "amd64"}
+    ]
+  }
+}
