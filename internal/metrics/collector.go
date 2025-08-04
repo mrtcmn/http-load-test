@@ -18,25 +18,25 @@ type PercentileMetrics struct {
 
 // ResponseTimeMetrics contains detailed response time statistics
 type ResponseTimeMetrics struct {
-	Min       time.Duration `json:"min"`
-	Max       time.Duration `json:"max"`
-	Avg       time.Duration `json:"avg"`
-	Total     time.Duration `json:"total"`
-	Count     int           `json:"count"`
+	Min       time.Duration  `json:"min"`
+	Max       time.Duration  `json:"max"`
+	Avg       time.Duration  `json:"avg"`
+	Total     time.Duration  `json:"total"`
+	Count     int            `json:"count"`
 	Histogram map[string]int `json:"histogram"` // Time ranges to count
 }
 
 // MetricsSummary represents the complete metrics summary
 type MetricsSummary struct {
-	TotalRequests     int                    `json:"totalRequests"`
-	SuccessfulReqs    int                    `json:"successfulRequests"`
-	FailedRequests    int                    `json:"failedRequests"`
-	Duration          time.Duration          `json:"duration"`
-	RequestsPerSecond float64               `json:"requestsPerSecond"`
-	Percentiles       PercentileMetrics     `json:"percentiles"`
-	StatusCodes       map[int]int           `json:"statusCodes"`
-	Errors            map[string]int        `json:"errors"`
-	ResponseTimes     ResponseTimeMetrics   `json:"responseTimes"`
+	TotalRequests     int                 `json:"totalRequests"`
+	SuccessfulReqs    int                 `json:"successfulRequests"`
+	FailedRequests    int                 `json:"failedRequests"`
+	Duration          time.Duration       `json:"duration"`
+	RequestsPerSecond float64             `json:"requestsPerSecond"`
+	Percentiles       PercentileMetrics   `json:"percentiles"`
+	StatusCodes       map[int]int         `json:"statusCodes"`
+	Errors            map[string]int      `json:"errors"`
+	ResponseTimes     ResponseTimeMetrics `json:"responseTimes"`
 }
 
 // RealtimeStats represents real-time statistics during test execution
@@ -62,7 +62,7 @@ type MetricsCollector struct {
 	totalRequests int
 	successful    int
 	failed        int
-	
+
 	// Histogram buckets for response time distribution
 	histogramBuckets map[string]int
 	bucketRanges     []HistogramBucket
@@ -116,7 +116,7 @@ func (m *MetricsCollector) AddResult(duration time.Duration, statusCode int, suc
 
 	m.totalRequests++
 	m.responseTimes = append(m.responseTimes, duration)
-	
+
 	if success {
 		m.successful++
 	} else {
@@ -125,9 +125,9 @@ func (m *MetricsCollector) AddResult(duration time.Duration, statusCode int, suc
 			m.errors[errorMsg]++
 		}
 	}
-	
+
 	m.statusCodes[statusCode]++
-	
+
 	// Update histogram
 	m.updateHistogram(duration)
 }
@@ -162,11 +162,11 @@ func (m *MetricsCollector) CalculatePercentiles() PercentileMetrics {
 	p50 := calculatePercentile(times, 50)
 	p95 := calculatePercentile(times, 95)
 	p99 := calculatePercentile(times, 99)
-	
+
 	// Calculate min, max, avg
 	min := times[0]
 	max := times[len(times)-1]
-	
+
 	var total time.Duration
 	for _, t := range times {
 		total += t
@@ -188,35 +188,35 @@ func calculatePercentile(sortedTimes []time.Duration, percentile float64) time.D
 	if len(sortedTimes) == 0 {
 		return 0
 	}
-	
+
 	if percentile <= 0 {
 		return sortedTimes[0]
 	}
 	if percentile >= 100 {
 		return sortedTimes[len(sortedTimes)-1]
 	}
-	
+
 	// Calculate index using the nearest-rank method
 	index := (percentile / 100.0) * float64(len(sortedTimes)-1)
-	
+
 	// If index is exact, return that element
 	if index == float64(int(index)) {
 		return sortedTimes[int(index)]
 	}
-	
+
 	// Otherwise, interpolate between two nearest values
 	lower := int(index)
 	upper := lower + 1
-	
+
 	if upper >= len(sortedTimes) {
 		return sortedTimes[len(sortedTimes)-1]
 	}
-	
+
 	// Linear interpolation
 	fraction := index - float64(lower)
 	lowerVal := float64(sortedTimes[lower])
 	upperVal := float64(sortedTimes[upper])
-	
+
 	interpolated := lowerVal + fraction*(upperVal-lowerVal)
 	return time.Duration(interpolated)
 }
@@ -237,7 +237,7 @@ func (m *MetricsCollector) GetSummary() MetricsSummary {
 	}
 
 	percentiles := m.calculatePercentilesUnsafe()
-	
+
 	// Calculate response time metrics
 	var total time.Duration
 	var min, max time.Duration
@@ -254,7 +254,7 @@ func (m *MetricsCollector) GetSummary() MetricsSummary {
 			}
 		}
 	}
-	
+
 	var avg time.Duration
 	if len(m.responseTimes) > 0 {
 		avg = total / time.Duration(len(m.responseTimes))
@@ -286,12 +286,12 @@ func (m *MetricsCollector) GetRealTimeStats() RealtimeStats {
 	defer m.mutex.RUnlock()
 
 	elapsed := time.Since(m.startTime)
-	
+
 	var currentRPS float64
 	if elapsed > 0 {
 		currentRPS = float64(m.totalRequests) / elapsed.Seconds()
 	}
-	
+
 	var avgResponseTime time.Duration
 	if len(m.responseTimes) > 0 {
 		var total time.Duration
@@ -332,11 +332,11 @@ func (m *MetricsCollector) calculatePercentilesUnsafe() PercentileMetrics {
 	p50 := calculatePercentile(times, 50)
 	p95 := calculatePercentile(times, 95)
 	p99 := calculatePercentile(times, 99)
-	
+
 	// Calculate min, max, avg
 	min := times[0]
 	max := times[len(times)-1]
-	
+
 	var total time.Duration
 	for _, t := range times {
 		total += t
@@ -374,6 +374,16 @@ func (m *MetricsCollector) GetCount() int {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
 	return m.totalRequests
+}
+
+// GetResponseTimes returns a copy of all collected response times
+func (m *MetricsCollector) GetResponseTimes() []time.Duration {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+
+	times := make([]time.Duration, len(m.responseTimes))
+	copy(times, m.responseTimes)
+	return times
 }
 
 // Helper functions to copy maps safely

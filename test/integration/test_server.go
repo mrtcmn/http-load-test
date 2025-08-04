@@ -392,3 +392,62 @@ func (ts *TestServer) Reset() {
 	ts.stats.StartTime = time.Now()
 	ts.stats.LastRequestTime = time.Time{}
 }
+
+// SetDefaultDelay sets the default delay for all endpoints
+func (ts *TestServer) SetDefaultDelay(delayMs int) {
+	ts.mutex.Lock()
+	defer ts.mutex.Unlock()
+	ts.config.DefaultDelay = time.Duration(delayMs) * time.Millisecond
+}
+
+// SetVariableDelay enables variable delay responses for distribution testing
+func (ts *TestServer) SetVariableDelay(enabled bool) {
+	if enabled {
+		// Configure /test endpoint with variable delays
+		ts.ConfigureEndpoint("/test", &EndpointConfig{
+			StatusCode:   200,
+			Delay:        0, // Will be overridden by variable delay logic
+			ResponseBody: nil,
+			Headers:      make(map[string]string),
+			FailureRate:  0.0,
+			ResponseSize: 0,
+		})
+
+		// Override the /test handler to provide variable delays
+		ts.mux.HandleFunc("/test", ts.handleVariableDelayRequest)
+	}
+}
+
+// handleVariableDelayRequest provides variable delays for distribution testing
+func (ts *TestServer) handleVariableDelayRequest(w http.ResponseWriter, r *http.Request) {
+	ts.updateStats(r.URL.Path)
+
+	// Generate variable delay based on request pattern
+	// This creates a realistic distribution of response times
+	nanos := time.Now().UnixNano()
+
+	// Create a distribution: 70% fast (10-50ms), 20% medium (50-200ms), 10% slow (200-500ms)
+	var delay time.Duration
+	switch nanos % 10 {
+	case 0: // 10% slow responses
+		delay = time.Duration(200+nanos%300) * time.Millisecond
+	case 1, 2: // 20% medium responses
+		delay = time.Duration(50+nanos%150) * time.Millisecond
+	default: // 70% fast responses
+		delay = time.Duration(10+nanos%40) * time.Millisecond
+	}
+
+	time.Sleep(delay)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	ts.updateStatsCode(200)
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":    "success",
+		"timestamp": time.Now().Unix(),
+		"path":      r.URL.Path,
+		"method":    r.Method,
+		"delay":     delay.Milliseconds(),
+	})
+}
