@@ -62,7 +62,7 @@
 - [x] 5. Build web server and REST API
   - [x] 5.1 Create HTTP server with static file serving
     - Implement HTTP server with embedded static assets
-    - Add routes for serving TanStack Start application
+    - Add routes for serving React SPA build files
     - Create middleware for CORS and security headers
     - Write tests for web server functionality
     - _Requirements: 4.1, 4.2_
@@ -74,12 +74,12 @@
     - Write API integration tests
     - _Requirements: 4.5, 7.4_
 
-- [x] 6. Develop TanStack Start frontend application
-  - [x] 6.1 Set up TanStack Start project with Tailwind and shadcn/ui
-    - Initialize TanStack Start project with React and TypeScript
+- [-] 6. Develop React frontend application
+  - [x] 6.1 Set up React project with Tailwind and shadcn/ui
+    - Initialize React project with TypeScript and Vite
     - Configure Tailwind CSS and shadcn/ui components
-    - Set up TanStack Query for state management and data fetching
-    - Create basic project structure and file-based routing
+    - Set up TanStack Router for client-side routing (no SSR)
+    - Create basic project structure with src/ directory
     - _Requirements: 4.2, 4.3, 5.1, 5.2_
 
   - [x] 6.2 Create metrics dashboard components
@@ -96,7 +96,7 @@
     - Write tests for chart components and real-time updates
     - _Requirements: 4.4, 5.1, 5.2_
 
-  - [x] 6.4 Build export and history functionality
+  - [ ] 6.4 Build export and history functionality
     - Create ExportControls component for data export options
     - Implement CSV and JSON export functionality
     - Add test history view and result comparison

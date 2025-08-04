@@ -3,72 +3,86 @@ import { render, screen } from '@testing-library/react'
 import { PercentileMetrics } from '../PercentileMetrics'
 
 const mockPercentiles = {
-  p50: 120,
-  p95: 450,
+  p50: 150,
+  p95: 500,
   p99: 800,
-  min: 45,
+  min: 50,
   max: 1200,
-  avg: 180,
+  avg: 200
 }
 
 describe('PercentileMetrics', () => {
-  it('should render component title and description', () => {
+  it('renders component title', () => {
     render(<PercentileMetrics />)
     expect(screen.getByText('Response Time Percentiles')).toBeInTheDocument()
     expect(screen.getByText('Distribution of response times across all requests')).toBeInTheDocument()
   })
 
-  it('should display all percentile metrics', () => {
+  it('shows no data message when percentiles are not provided', () => {
+    render(<PercentileMetrics />)
+    expect(screen.getByText('No data available')).toBeInTheDocument()
+    expect(screen.getByText('Start a test to see percentile metrics')).toBeInTheDocument()
+  })
+
+  it('displays percentile values correctly', () => {
+    render(<PercentileMetrics percentiles={mockPercentiles} />)
+    
+    // Check key metrics display
+    expect(screen.getByText('150ms')).toBeInTheDocument() // P50
+    expect(screen.getByText('500ms')).toBeInTheDocument() // P95
+    expect(screen.getByText('800ms')).toBeInTheDocument() // P99
+  })
+
+  it('displays additional stats correctly', () => {
+    render(<PercentileMetrics percentiles={mockPercentiles} />)
+    
+    // Check additional stats
+    expect(screen.getByText('50ms')).toBeInTheDocument() // Minimum
+    expect(screen.getByText('1.20s')).toBeInTheDocument() // Maximum (formatted as seconds)
+    expect(screen.getByText('200ms')).toBeInTheDocument() // Average
+  })
+
+  it('calculates range correctly', () => {
+    render(<PercentileMetrics percentiles={mockPercentiles} />)
+    
+    // Range should be max - min = 1200 - 50 = 1150ms = 1.15s
+    expect(screen.getByText('1.15s')).toBeInTheDocument()
+  })
+
+  it('formats time values correctly', () => {
+    const percentiles = {
+      p50: 50,      // Should show as 50ms
+      p95: 1500,    // Should show as 1.50s
+      p99: 2000,    // Should show as 2.00s
+      min: 10,      // Should show as 10ms
+      max: 5000,    // Should show as 5.00s
+      avg: 750      // Should show as 750ms
+    }
+    
+    render(<PercentileMetrics percentiles={percentiles} />)
+    
+    expect(screen.getByText('50ms')).toBeInTheDocument()
+    expect(screen.getByText('1.50s')).toBeInTheDocument()
+    expect(screen.getByText('2.00s')).toBeInTheDocument()
+    expect(screen.getByText('10ms')).toBeInTheDocument()
+    expect(screen.getByText('5.00s')).toBeInTheDocument()
+    expect(screen.getByText('750ms')).toBeInTheDocument()
+  })
+
+  it('shows correct labels for percentiles', () => {
     render(<PercentileMetrics percentiles={mockPercentiles} />)
     
     expect(screen.getByText('P50 (Median)')).toBeInTheDocument()
     expect(screen.getByText('P95')).toBeInTheDocument()
     expect(screen.getByText('P99')).toBeInTheDocument()
-    expect(screen.getByText('Average')).toBeInTheDocument()
-    expect(screen.getByText('Minimum')).toBeInTheDocument()
-    expect(screen.getByText('Maximum')).toBeInTheDocument()
   })
 
-  it('should format time values correctly', () => {
+  it('displays stat labels correctly', () => {
     render(<PercentileMetrics percentiles={mockPercentiles} />)
     
-    // Check millisecond formatting (using getAllByText for values that appear multiple times)
-    expect(screen.getByText('120ms')).toBeInTheDocument() // p50
-    expect(screen.getByText('450ms')).toBeInTheDocument() // p95
-    expect(screen.getByText('800ms')).toBeInTheDocument() // p99
-    expect(screen.getAllByText('45ms')[0]).toBeInTheDocument()  // min (appears in range too)
-    expect(screen.getByText('180ms')).toBeInTheDocument() // avg
-  })
-
-  it('should format large time values in seconds', () => {
-    const largeTimePercentiles = {
-      p50: 1500, // 1.5 seconds
-      p95: 5000, // 5 seconds
-      p99: 10000, // 10 seconds
-      min: 100,
-      max: 15000, // 15 seconds
-      avg: 3000, // 3 seconds
-    }
-    
-    render(<PercentileMetrics percentiles={largeTimePercentiles} />)
-    
-    expect(screen.getByText('1.50s')).toBeInTheDocument() // p50
-    expect(screen.getByText('5.00s')).toBeInTheDocument() // p95
-    expect(screen.getByText('10.00s')).toBeInTheDocument() // p99
-    expect(screen.getByText('3.00s')).toBeInTheDocument() // avg
-  })
-
-  it('should display zero values when no percentiles provided', () => {
-    render(<PercentileMetrics />)
-    
-    // Should display 0ms for all metrics (including range display, so 8 total)
-    const zeroValues = screen.getAllByText('0ms')
-    expect(zeroValues.length).toBeGreaterThanOrEqual(6) // At least 6 percentile metrics
-  })
-
-  it('should render response time range visualization', () => {
-    render(<PercentileMetrics percentiles={mockPercentiles} />)
-    
-    expect(screen.getByText('Response Time Range')).toBeInTheDocument()
+    expect(screen.getByText('Minimum:')).toBeInTheDocument()
+    expect(screen.getByText('Maximum:')).toBeInTheDocument()
+    expect(screen.getByText('Average:')).toBeInTheDocument()
+    expect(screen.getByText('Range:')).toBeInTheDocument()
   })
 })

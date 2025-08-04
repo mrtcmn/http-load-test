@@ -1,239 +1,322 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { RealtimeChart, RealtimeDataPoint } from '../RealtimeChart'
+import React from 'react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { RealtimeChart } from '../RealtimeChart'
+
+// Mock the hooks
+vi.mock('../../hooks/useRealtimeMetrics', () => ({
+  useRealtimeMetrics: vi.fn()
+}))
 
 // Mock Recharts components
 vi.mock('recharts', () => ({
-  LineChart: ({ children, data }: any) => (
-    <div data-testid="line-chart" data-chart-data={JSON.stringify(data)}>
-      {children}
-    </div>
-  ),
-  Line: ({ dataKey, name }: any) => (
-    <div data-testid={`line-${dataKey}`} data-name={name} />
-  ),
-  XAxis: ({ dataKey, tickFormatter }: any) => (
-    <div data-testid="x-axis" data-key={dataKey} />
-  ),
-  YAxis: ({ yAxisId }: any) => (
-    <div data-testid={`y-axis-${yAxisId || 'default'}`} />
-  ),
+  LineChart: ({ children }: any) => <div data-testid="line-chart">{children}</div>,
+  Line: ({ name }: any) => <div data-testid={`line-${name}`}>{name}</div>,
+  XAxis: () => <div data-testid="x-axis" />,
+  YAxis: () => <div data-testid="y-axis" />,
   CartesianGrid: () => <div data-testid="cartesian-grid" />,
-  Tooltip: ({ content }: any) => <div data-testid="tooltip" />,
-  ResponsiveContainer: ({ children }: any) => (
-    <div data-testid="responsive-container">{children}</div>
-  ),
+  Tooltip: () => <div data-testid="tooltip" />,
+  ResponsiveContainer: ({ children }: any) => <div data-testid="responsive-container">{children}</div>,
   Legend: () => <div data-testid="legend" />,
+  ReferenceLine: ({ label }: any) => <div data-testid="reference-line">{label?.value}</div>
 }))
 
-const mockData: RealtimeDataPoint[] = [
-  {
-    timestamp: 1234567890000,
-    responseTime: 120,
-    requestsPerSecond: 50,
-    successRate: 95.5,
-    activeRequests: 10,
-  },
-  {
-    timestamp: 1234567891000,
-    responseTime: 150,
-    requestsPerSecond: 55,
-    successRate: 96.0,
-    activeRequests: 12,
-  },
-  {
-    timestamp: 1234567892000,
-    responseTime: 110,
-    requestsPerSecond: 48,
-    successRate: 94.8,
-    activeRequests: 8,
-  },
-]
+import { useRealtimeMetrics } from '../../hooks/useRealtimeMetrics'
+
+const mockUseRealtimeMetrics = useRealtimeMetrics as any
 
 describe('RealtimeChart', () => {
-  const defaultProps = {
-    data: mockData,
-    isConnected: true,
+  const mockMetricsReturn = {
+    currentMetrics: null,
+    metricsHistory: {
+      timestamps: [],
+      responseTimes: [],
+      requestsPerSecond: [],
+      errorRates: [],
+      activeConnections: []
+    },
+    isConnected: false,
     isConnecting: false,
     error: null,
-    onReconnect: vi.fn(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    clearHistory: vi.fn(),
+    connectionAttempts: 0
   }
 
-  it('should render all chart sections', () => {
-    render(<RealtimeChart {...defaultProps} />)
-
-    expect(screen.getByText('Response Time')).toBeInTheDocument()
-    expect(screen.getByText('Real-time response time measurements')).toBeInTheDocument()
-    expect(screen.getByText('Requests Per Second')).toBeInTheDocument()
-    expect(screen.getByText('Current throughput over time')).toBeInTheDocument()
-    expect(screen.getByText('Combined Metrics')).toBeInTheDocument()
-    expect(screen.getByText('Success rate and active requests over time')).toBeInTheDocument()
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockUseRealtimeMetrics.mockReturnValue(mockMetricsReturn)
   })
 
-  it('should display connection status when connected', () => {
-    render(<RealtimeChart {...defaultProps} />)
+  it('should render with default state', () => {
+    render(<RealtimeChart />)
 
-    expect(screen.getByText('Connected')).toBeInTheDocument()
-    expect(screen.getByText('Connected')).toHaveClass('text-green-500')
+    expect(screen.getByText('Real-time Performance')).toBeInTheDocument()
+    expect(screen.getByText('Live metrics streaming from load test execution')).toBeInTheDocument()
+    expect(screen.getByText('Disconnected')).toBeInTheDocument()
+    expect(screen.getByText('No connection')).toBeInTheDocument()
   })
 
-  it('should display connection status when connecting', () => {
-    render(
-      <RealtimeChart
-        {...defaultProps}
-        isConnected={false}
-        isConnecting={true}
-      />
-    )
+  it('should show connecting state', () => {
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnecting: true
+    })
+
+    render(<RealtimeChart />)
 
     expect(screen.getByText('Connecting...')).toBeInTheDocument()
-    expect(screen.getByText('Connecting...')).toHaveClass('text-yellow-500')
   })
 
-  it('should display connection status when disconnected', () => {
+  it('should show connected state', () => {
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true
+    })
+
+    render(<RealtimeChart />)
+
+    expect(screen.getByText('Connected')).toBeInTheDocument()
+    expect(screen.getByText('Waiting for data...')).toBeInTheDocument()
+  })
+
+  it('should display current metrics when available', () => {
+    const currentMetrics = {
+      timestamp: Date.now(),
+      totalRequests: 100,
+      successfulRequests: 95,
+      failedRequests: 5,
+      requestsPerSecond: 10.5,
+      avgResponseTime: 250,
+      currentResponseTime: 300,
+      errorRate: 5.0,
+      activeConnections: 8
+    }
+
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true,
+      currentMetrics
+    })
+
+    render(<RealtimeChart />)
+
+    expect(screen.getByText('250ms')).toBeInTheDocument() // Avg Response
+    expect(screen.getByText('10.5')).toBeInTheDocument() // Req/sec
+    expect(screen.getByText('5.0%')).toBeInTheDocument() // Error Rate
+    expect(screen.getByText('8')).toBeInTheDocument() // Active Conn.
+  })
+
+  it('should render chart when data is available', () => {
+    const metricsHistory = {
+      timestamps: [1000, 2000, 3000],
+      responseTimes: [100, 200, 150],
+      requestsPerSecond: [5, 10, 8],
+      errorRates: [1, 2, 1.5],
+      activeConnections: [3, 5, 4]
+    }
+
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true,
+      metricsHistory
+    })
+
+    render(<RealtimeChart />)
+
+    expect(screen.getByTestId('responsive-container')).toBeInTheDocument()
+    expect(screen.getByTestId('line-chart')).toBeInTheDocument()
+    expect(screen.getByTestId('line-Response Time')).toBeInTheDocument()
+    expect(screen.getByTestId('line-Requests/sec')).toBeInTheDocument()
+    expect(screen.getByTestId('line-Error Rate (%)')).toBeInTheDocument()
+    expect(screen.getByTestId('line-Active Connections')).toBeInTheDocument()
+  })
+
+  it('should show error message when there is an error', () => {
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      error: 'Connection failed',
+      connectionAttempts: 2
+    })
+
+    render(<RealtimeChart />)
+
+    expect(screen.getByText('Connection error: Connection failed (Attempt 2)')).toBeInTheDocument()
+    expect(screen.getByText('Retry')).toBeInTheDocument()
+  })
+
+  it('should call connect when retry button is clicked', () => {
+    const mockConnect = vi.fn()
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      error: 'Connection failed',
+      connect: mockConnect
+    })
+
+    render(<RealtimeChart />)
+
+    const retryButton = screen.getByText('Retry')
+    fireEvent.click(retryButton)
+
+    expect(mockConnect).toHaveBeenCalledOnce()
+  })
+
+  it('should call clearHistory when clear button is clicked', () => {
+    const mockClearHistory = vi.fn()
+    const metricsHistory = {
+      timestamps: [1000, 2000],
+      responseTimes: [100, 200],
+      requestsPerSecond: [5, 10],
+      errorRates: [1, 2],
+      activeConnections: [3, 5]
+    }
+
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true,
+      metricsHistory,
+      clearHistory: mockClearHistory
+    })
+
+    render(<RealtimeChart />)
+
+    const clearButton = screen.getByText('Clear')
+    fireEvent.click(clearButton)
+
+    expect(mockClearHistory).toHaveBeenCalledOnce()
+  })
+
+  it('should disable clear button when no data', () => {
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true
+    })
+
+    render(<RealtimeChart />)
+
+    const clearButton = screen.getByText('Clear')
+    expect(clearButton).toBeDisabled()
+  })
+
+  it('should call connect when connect button is clicked in no connection state', () => {
+    const mockConnect = vi.fn()
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      connect: mockConnect
+    })
+
+    render(<RealtimeChart />)
+
+    const connectButton = screen.getByText('Connect')
+    fireEvent.click(connectButton)
+
+    expect(mockConnect).toHaveBeenCalledOnce()
+  })
+
+  it('should show connection attempts when reconnecting', () => {
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      connectionAttempts: 3
+    })
+
+    render(<RealtimeChart />)
+
+    expect(screen.getByText('Reconnection attempts: 3')).toBeInTheDocument()
+  })
+
+  it('should show establishing connection message when connecting', () => {
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnecting: true
+    })
+
+    render(<RealtimeChart />)
+
+    expect(screen.getByText('Establishing connection...')).toBeInTheDocument()
+  })
+
+  it('should pass correct options to useRealtimeMetrics', () => {
+    const wsUrl = 'ws://custom:8080/metrics'
+    const maxHistoryPoints = 50
+    const updateInterval = 500
+
     render(
-      <RealtimeChart
-        {...defaultProps}
-        isConnected={false}
-        isConnecting={false}
+      <RealtimeChart 
+        wsUrl={wsUrl}
+        maxHistoryPoints={maxHistoryPoints}
+        updateInterval={updateInterval}
       />
     )
 
-    expect(screen.getByText('Disconnected')).toBeInTheDocument()
-    expect(screen.getByText('Disconnected')).toHaveClass('text-red-500')
-  })
-
-  it('should render charts with correct data', () => {
-    render(<RealtimeChart {...defaultProps} />)
-
-    const charts = screen.getAllByTestId('line-chart')
-    expect(charts).toHaveLength(3)
-
-    // Check that data is passed to charts
-    charts.forEach((chart) => {
-      const chartData = JSON.parse(chart.getAttribute('data-chart-data') || '[]')
-      expect(chartData).toEqual(mockData)
+    expect(mockUseRealtimeMetrics).toHaveBeenCalledWith({
+      wsUrl,
+      maxHistoryPoints,
+      updateInterval
     })
   })
 
-  it('should render correct chart lines', () => {
-    render(<RealtimeChart {...defaultProps} />)
+  it('should format time correctly', () => {
+    const currentMetrics = {
+      timestamp: Date.now(),
+      totalRequests: 100,
+      successfulRequests: 95,
+      failedRequests: 5,
+      requestsPerSecond: 10.5,
+      avgResponseTime: 1500, // 1.5 seconds
+      currentResponseTime: 300,
+      errorRate: 5.0,
+      activeConnections: 8
+    }
 
-    expect(screen.getByTestId('line-responseTime')).toBeInTheDocument()
-    expect(screen.getByTestId('line-requestsPerSecond')).toBeInTheDocument()
-    expect(screen.getByTestId('line-successRate')).toBeInTheDocument()
-    expect(screen.getByTestId('line-activeRequests')).toBeInTheDocument()
-  })
-
-  it('should display error message when error occurs', () => {
-    const errorMessage = 'Connection failed'
-    render(
-      <RealtimeChart
-        {...defaultProps}
-        isConnected={false}
-        error={errorMessage}
-      />
-    )
-
-    expect(screen.getByText('Connection Error')).toBeInTheDocument()
-    expect(screen.getByText(errorMessage)).toBeInTheDocument()
-    expect(screen.getByText('Retry Connection')).toBeInTheDocument()
-  })
-
-  it('should call onReconnect when reconnect button is clicked', () => {
-    const onReconnect = vi.fn()
-    render(
-      <RealtimeChart
-        {...defaultProps}
-        isConnected={false}
-        error="Connection failed"
-        onReconnect={onReconnect}
-      />
-    )
-
-    const reconnectButton = screen.getByText('Retry Connection')
-    fireEvent.click(reconnectButton)
-
-    expect(onReconnect).toHaveBeenCalledTimes(1)
-  })
-
-  it('should show reconnect button in header when disconnected with error', () => {
-    const onReconnect = vi.fn()
-    render(
-      <RealtimeChart
-        {...defaultProps}
-        isConnected={false}
-        error="Connection failed"
-        onReconnect={onReconnect}
-      />
-    )
-
-    const headerReconnectButton = screen.getByText('Reconnect')
-    fireEvent.click(headerReconnectButton)
-
-    expect(onReconnect).toHaveBeenCalledTimes(1)
-  })
-
-  it('should not show error section when no error', () => {
-    render(<RealtimeChart {...defaultProps} />)
-
-    expect(screen.queryByText('Connection Error')).not.toBeInTheDocument()
-    expect(screen.queryByText('Retry Connection')).not.toBeInTheDocument()
-  })
-
-  it('should render with empty data', () => {
-    render(<RealtimeChart {...defaultProps} data={[]} />)
-
-    const charts = screen.getAllByTestId('line-chart')
-    charts.forEach((chart) => {
-      const chartData = JSON.parse(chart.getAttribute('data-chart-data') || '[]')
-      expect(chartData).toEqual([])
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true,
+      currentMetrics
     })
+
+    render(<RealtimeChart />)
+
+    expect(screen.getByText('1.50s')).toBeInTheDocument() // Should format as seconds
   })
 
-  it('should render responsive containers', () => {
-    render(<RealtimeChart {...defaultProps} />)
+  it('should show legend when showLegend is true', () => {
+    const metricsHistory = {
+      timestamps: [1000],
+      responseTimes: [100],
+      requestsPerSecond: [5],
+      errorRates: [1],
+      activeConnections: [3]
+    }
 
-    const containers = screen.getAllByTestId('responsive-container')
-    expect(containers).toHaveLength(3) // One for each chart
-  })
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true,
+      metricsHistory
+    })
 
-  it('should render chart axes', () => {
-    render(<RealtimeChart {...defaultProps} />)
-
-    // Should have X axes for all charts
-    const xAxes = screen.getAllByTestId('x-axis')
-    expect(xAxes).toHaveLength(3)
-
-    // Should have Y axes (including dual axes for combined chart)
-    expect(screen.getByTestId('y-axis-default')).toBeInTheDocument()
-    expect(screen.getByTestId('y-axis-left')).toBeInTheDocument()
-    expect(screen.getByTestId('y-axis-right')).toBeInTheDocument()
-  })
-
-  it('should render legend for combined metrics chart', () => {
-    render(<RealtimeChart {...defaultProps} />)
+    render(<RealtimeChart showLegend={true} />)
 
     expect(screen.getByTestId('legend')).toBeInTheDocument()
   })
 
-  it('should render connection indicator dots', () => {
-    const { rerender } = render(<RealtimeChart {...defaultProps} />)
+  it('should not show legend when showLegend is false', () => {
+    const metricsHistory = {
+      timestamps: [1000],
+      responseTimes: [100],
+      requestsPerSecond: [5],
+      errorRates: [1],
+      activeConnections: [3]
+    }
 
-    // Connected state - green dot
-    let dots = document.querySelectorAll('.bg-green-500')
-    expect(dots).toHaveLength(1)
+    mockUseRealtimeMetrics.mockReturnValue({
+      ...mockMetricsReturn,
+      isConnected: true,
+      metricsHistory
+    })
 
-    // Disconnected state - red dot
-    rerender(
-      <RealtimeChart
-        {...defaultProps}
-        isConnected={false}
-        isConnecting={false}
-      />
-    )
+    render(<RealtimeChart showLegend={false} />)
 
-    dots = document.querySelectorAll('.bg-red-500')
-    expect(dots).toHaveLength(1)
+    expect(screen.queryByTestId('legend')).not.toBeInTheDocument()
   })
 })

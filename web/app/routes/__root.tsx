@@ -1,10 +1,7 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router'
+import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/router-devtools'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import '../styles/globals.css'
 
-const queryClient = new QueryClient()
+import '../globals.css'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -12,12 +9,33 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       <div className="min-h-screen bg-background">
-        <Outlet />
+        <nav className="border-b">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <Link to="/" className="text-xl font-bold">
+                HTTP Load Test
+              </Link>
+              <div className="flex space-x-4">
+                <Link
+                  to="/"
+                  className="text-sm font-medium transition-colors hover:text-primary"
+                  activeProps={{
+                    className: 'text-primary',
+                  }}
+                >
+                  Dashboard
+                </Link>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <main className="container mx-auto px-4 py-8">
+          <Outlet />
+        </main>
       </div>
-      <ReactQueryDevtools initialIsOpen={false} />
       <TanStackRouterDevtools position="bottom-right" />
-    </QueryClientProvider>
+    </>
   )
 }

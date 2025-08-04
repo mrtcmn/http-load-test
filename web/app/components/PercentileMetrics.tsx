@@ -1,38 +1,32 @@
 import React from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-
-interface PercentileData {
-  p50: number
-  p95: number
-  p99: number
-  min: number
-  max: number
-  avg: number
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 interface PercentileMetricsProps {
-  percentiles?: PercentileData
+  percentiles?: {
+    p50: number
+    p95: number
+    p99: number
+    min: number
+    max: number
+    avg: number
+  }
 }
 
 export function PercentileMetrics({ percentiles }: PercentileMetricsProps) {
-  const formatTime = (timeMs: number) => {
-    if (timeMs < 1000) {
-      return `${timeMs.toFixed(0)}ms`
-    } else if (timeMs < 60000) {
-      return `${(timeMs / 1000).toFixed(2)}s`
-    } else {
-      return `${(timeMs / 60000).toFixed(2)}m`
-    }
+  const formatTime = (ms: number) => {
+    if (ms < 1000) return `${ms.toFixed(0)}ms`
+    return `${(ms / 1000).toFixed(2)}s`
   }
 
-  const percentileItems = [
-    { label: 'P50 (Median)', value: percentiles?.p50 || 0, color: 'text-blue-600' },
-    { label: 'P95', value: percentiles?.p95 || 0, color: 'text-orange-600' },
-    { label: 'P99', value: percentiles?.p99 || 0, color: 'text-red-600' },
-    { label: 'Average', value: percentiles?.avg || 0, color: 'text-green-600' },
-    { label: 'Minimum', value: percentiles?.min || 0, color: 'text-gray-600' },
-    { label: 'Maximum', value: percentiles?.max || 0, color: 'text-purple-600' },
-  ]
+  const chartData = percentiles ? [
+    { name: 'Min', value: percentiles.min, label: 'Minimum' },
+    { name: 'P50', value: percentiles.p50, label: '50th Percentile' },
+    { name: 'Avg', value: percentiles.avg, label: 'Average' },
+    { name: 'P95', value: percentiles.p95, label: '95th Percentile' },
+    { name: 'P99', value: percentiles.p99, label: '99th Percentile' },
+    { name: 'Max', value: percentiles.max, label: 'Maximum' },
+  ] : []
 
   return (
     <Card>
@@ -43,34 +37,83 @@ export function PercentileMetrics({ percentiles }: PercentileMetricsProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {percentileItems.map((item) => (
-            <div key={item.label} className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full bg-current ${item.color}`} />
-                <span className="text-sm font-medium">{item.label}</span>
+        {percentiles ? (
+          <div className="space-y-6">
+            {/* Key Metrics */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatTime(percentiles.p50)}
+                </div>
+                <div className="text-sm text-muted-foreground">P50 (Median)</div>
               </div>
-              <span className={`text-lg font-bold ${item.color}`}>
-                {formatTime(item.value)}
-              </span>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-orange-600">
+                  {formatTime(percentiles.p95)}
+                </div>
+                <div className="text-sm text-muted-foreground">P95</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {formatTime(percentiles.p99)}
+                </div>
+                <div className="text-sm text-muted-foreground">P99</div>
+              </div>
             </div>
-          ))}
-        </div>
 
-        {/* Visual representation */}
-        <div className="mt-6 space-y-2">
-          <div className="text-sm font-medium text-muted-foreground">Response Time Range</div>
-          <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div 
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-green-400 via-yellow-400 via-orange-400 to-red-500"
-              style={{ width: '100%' }}
-            />
+            {/* Chart */}
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={formatTime} />
+                  <Tooltip 
+                    formatter={(value: number) => [formatTime(value), 'Response Time']}
+                    labelFormatter={(label) => {
+                      const item = chartData.find(d => d.name === label)
+                      return item?.label || label
+                    }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill="#3b82f6"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Additional Stats */}
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Minimum:</span>
+                <span className="text-sm font-medium">{formatTime(percentiles.min)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Maximum:</span>
+                <span className="text-sm font-medium">{formatTime(percentiles.max)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Average:</span>
+                <span className="text-sm font-medium">{formatTime(percentiles.avg)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Range:</span>
+                <span className="text-sm font-medium">
+                  {formatTime(percentiles.max - percentiles.min)}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{formatTime(percentiles?.min || 0)}</span>
-            <span>{formatTime(percentiles?.max || 0)}</span>
+        ) : (
+          <div className="flex items-center justify-center h-64 text-muted-foreground">
+            <div className="text-center">
+              <div className="text-lg font-medium">No data available</div>
+              <div className="text-sm">Start a test to see percentile metrics</div>
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   )

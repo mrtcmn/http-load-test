@@ -1,143 +1,91 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MetricsDashboard } from '../MetricsDashboard'
+import { MetricsDashboard, type TestResults } from '../MetricsDashboard'
 
-// Mock the hooks
-vi.mock('../../hooks/useRealtimeMetrics', () => ({
-  useRealtimeMetrics: vi.fn(() => ({
-    metrics: {
-      dataPoints: [],
-      currentRps: 0,
-      currentSuccessRate: 100,
-      activeRequests: 0,
-      totalRequests: 0,
-      percentiles: { p50: 0, p95: 0, p99: 0 },
-    },
-    isConnected: false,
-    isConnecting: false,
-    error: null,
-    reconnect: vi.fn(),
-    clearData: vi.fn(),
-  })),
-}))
-
-// Mock RealtimeChart component
-vi.mock('../RealtimeChart', () => ({
-  RealtimeChart: ({ data, isConnected, isConnecting, error }: any) => (
-    <div data-testid="realtime-chart">
-      <span data-testid="chart-data-length">{data.length}</span>
-      <span data-testid="chart-connected">{isConnected.toString()}</span>
-      <span data-testid="chart-connecting">{isConnecting.toString()}</span>
-      <span data-testid="chart-error">{error || 'no-error'}</span>
-    </div>
-  ),
-}))
-
-const mockMetrics = {
+const mockTestResults: TestResults = {
   totalRequests: 1000,
   successfulRequests: 950,
   failedRequests: 50,
   duration: 30000,
   requestsPerSecond: 33.3,
   percentiles: {
-    p50: 120,
-    p95: 450,
+    p50: 150,
+    p95: 500,
     p99: 800,
-    min: 45,
+    min: 50,
     max: 1200,
-    avg: 180,
+    avg: 200
   },
   statusCodes: {
     200: 950,
     404: 30,
-    500: 20,
+    500: 20
   },
   errors: {
     'Connection timeout': 25,
     'DNS resolution failed': 15,
+    'Connection refused': 10
   },
-  responseTimes: {
-    histogram: [
-      { bucket: '0-100ms', count: 300 },
-      { bucket: '100-200ms', count: 400 },
-    ],
-  },
+  responseTimes: [100, 150, 200, 250, 300]
 }
 
 describe('MetricsDashboard', () => {
-  it('should render dashboard title', () => {
+  it('renders dashboard title', () => {
     render(<MetricsDashboard />)
-    expect(screen.getByText('HTTP Load Test Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Load Test Dashboard')).toBeInTheDocument()
   })
 
-  it('should display test status when running', () => {
-    render(<MetricsDashboard isRunning={true} />)
-    expect(screen.getByText('Test Running')).toBeInTheDocument()
+  it('shows idle status when no test is running', () => {
+    render(<MetricsDashboard isTestRunning={false} />)
+    expect(screen.getByText('Ready to start testing')).toBeInTheDocument()
+    expect(screen.getByText('Idle')).toBeInTheDocument()
   })
 
-  it('should display test status when idle', () => {
-    render(<MetricsDashboard isRunning={false} />)
-    expect(screen.getByText('Test Idle')).toBeInTheDocument()
+  it('shows running status when test is active', () => {
+    render(<MetricsDashboard isTestRunning={true} />)
+    expect(screen.getByText('Test in progress...')).toBeInTheDocument()
+    expect(screen.getByText('Running')).toBeInTheDocument()
   })
 
-  it('should display metrics when provided', () => {
-    render(<MetricsDashboard metrics={mockMetrics} />)
+  it('displays test results correctly', () => {
+    render(<MetricsDashboard testResults={mockTestResults} />)
     
     // Check overview cards
     expect(screen.getByText('1,000')).toBeInTheDocument() // Total requests
-    expect(screen.getAllByText('95.0%')[0]).toBeInTheDocument() // Success rate (first occurrence)
     expect(screen.getByText('33.3')).toBeInTheDocument() // Requests per second
+    expect(screen.getByText('95.0%')).toBeInTheDocument() // Success rate
     expect(screen.getByText('30.0s')).toBeInTheDocument() // Duration
   })
 
-  it('should display zero values when no metrics provided', () => {
+  it('shows zero values when no test results', () => {
     render(<MetricsDashboard />)
     
-    // Check that zero values are displayed (using getAllByText for multiple occurrences)
-    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
-    expect(screen.getByText('0%')).toBeInTheDocument()
-    expect(screen.getByText('0s')).toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument() // Total requests
+    expect(screen.getByText('0.0')).toBeInTheDocument() // Requests per second
+    expect(screen.getByText('0.0%')).toBeInTheDocument() // Success rate
+    expect(screen.getByText('0.0s')).toBeInTheDocument() // Duration
   })
 
-  it('should render percentile metrics component', () => {
-    render(<MetricsDashboard metrics={mockMetrics} />)
-    expect(screen.getByText('Response Time Percentiles')).toBeInTheDocument()
-  })
-
-  it('should render error summary component', () => {
-    render(<MetricsDashboard metrics={mockMetrics} />)
-    expect(screen.getByText('Error Summary')).toBeInTheDocument()
-  })
-
-  it('should show real-time charts when test is running', () => {
-    render(<MetricsDashboard metrics={mockMetrics} isRunning={true} />)
+  it('calculates success rate correctly', () => {
+    const partialResults: TestResults = {
+      ...mockTestResults,
+      totalRequests: 100,
+      successfulRequests: 85,
+      failedRequests: 15
+    }
     
-    expect(screen.getByText('Real-time Metrics')).toBeInTheDocument()
-    expect(screen.getByTestId('realtime-chart')).toBeInTheDocument()
+    render(<MetricsDashboard testResults={partialResults} />)
+    expect(screen.getByText('85.0%')).toBeInTheDocument()
   })
 
-  it('should not show real-time charts when test is not running', () => {
-    render(<MetricsDashboard metrics={mockMetrics} isRunning={false} />)
+  it('formats large numbers with commas', () => {
+    const largeResults: TestResults = {
+      ...mockTestResults,
+      totalRequests: 1234567,
+      successfulRequests: 1234000
+    }
     
-    expect(screen.queryByText('Real-time Metrics')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('realtime-chart')).not.toBeInTheDocument()
-  })
-
-  it('should pass correct props to RealtimeChart', () => {
-    render(<MetricsDashboard metrics={mockMetrics} isRunning={true} />)
-    
-    const chart = screen.getByTestId('realtime-chart')
-    expect(screen.getByTestId('chart-data-length')).toHaveTextContent('0')
-    expect(screen.getByTestId('chart-connected')).toHaveTextContent('false')
-    expect(screen.getByTestId('chart-connecting')).toHaveTextContent('false')
-    expect(screen.getByTestId('chart-error')).toHaveTextContent('no-error')
-  })
-
-  it('should use custom websocket URL when provided', () => {
-    const customUrl = 'ws://custom:9090/metrics'
-    render(<MetricsDashboard websocketUrl={customUrl} isRunning={true} />)
-    
-    // The hook should be called with the custom URL
-    expect(screen.getByTestId('realtime-chart')).toBeInTheDocument()
+    render(<MetricsDashboard testResults={largeResults} />)
+    expect(screen.getByText('1,234,567')).toBeInTheDocument()
   })
 })

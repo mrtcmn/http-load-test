@@ -3,77 +3,83 @@ import { render, screen } from '@testing-library/react'
 import { ErrorSummary } from '../ErrorSummary'
 
 const mockStatusCodes = {
-  200: 950,
+  200: 850,
+  201: 100,
   404: 30,
-  500: 20,
+  500: 20
 }
 
 const mockErrors = {
   'Connection timeout': 25,
   'DNS resolution failed': 15,
   'Connection refused': 10,
+  'SSL handshake failed': 5,
+  'Request timeout': 3
 }
 
 describe('ErrorSummary', () => {
-  it('should render component title and description', () => {
-    render(<ErrorSummary totalRequests={1000} />)
-    expect(screen.getByText('Error Summary')).toBeInTheDocument()
-    expect(screen.getByText('Breakdown of HTTP status codes and error types')).toBeInTheDocument()
+  it('renders component title', () => {
+    render(<ErrorSummary totalRequests={0} />)
+    expect(screen.getByText('Error Analysis')).toBeInTheDocument()
+    expect(screen.getByText('HTTP status codes and error categorization')).toBeInTheDocument()
   })
 
-  it('should display HTTP status codes when provided', () => {
-    render(<ErrorSummary statusCodes={mockStatusCodes} totalRequests={1000} />)
-    
-    expect(screen.getByText('200 - Success')).toBeInTheDocument()
-    expect(screen.getByText('404 - Client Error')).toBeInTheDocument()
-    expect(screen.getByText('500 - Server Error')).toBeInTheDocument()
+  it('shows no data message when no status codes provided', () => {
+    render(<ErrorSummary totalRequests={0} />)
+    expect(screen.getByText('No data available')).toBeInTheDocument()
+    expect(screen.getByText('Start a test to see error analysis')).toBeInTheDocument()
   })
 
-  it('should display status code counts and percentages', () => {
+  it('displays summary stats correctly', () => {
     render(<ErrorSummary statusCodes={mockStatusCodes} totalRequests={1000} />)
     
+    // Success count (200 + 201 = 950)
     expect(screen.getByText('950')).toBeInTheDocument()
-    expect(screen.getByText('95.0%')).toBeInTheDocument()
-    expect(screen.getByText('30')).toBeInTheDocument()
+    
+    // Error count (404 + 500 = 50)
+    expect(screen.getByText('50')).toBeInTheDocument()
+    
+    // Redirect count (should be 0 in this case)
+    expect(screen.getByText('0')).toBeInTheDocument()
+  })
+
+  it('categorizes status codes correctly', () => {
+    render(<ErrorSummary statusCodes={mockStatusCodes} totalRequests={1000} />)
+    
+    // Check that status codes are displayed with counts
+    expect(screen.getByText('200 (850)')).toBeInTheDocument()
+    expect(screen.getByText('201 (100)')).toBeInTheDocument()
+    expect(screen.getByText('404 (30)')).toBeInTheDocument()
+    expect(screen.getByText('500 (20)')).toBeInTheDocument()
+  })
+
+  it('calculates percentages correctly', () => {
+    render(<ErrorSummary statusCodes={mockStatusCodes} totalRequests={1000} />)
+    
+    // 850/1000 = 85.0%
+    expect(screen.getByText('85.0%')).toBeInTheDocument()
+    // 100/1000 = 10.0%
+    expect(screen.getByText('10.0%')).toBeInTheDocument()
+    // 30/1000 = 3.0%
     expect(screen.getByText('3.0%')).toBeInTheDocument()
-    expect(screen.getByText('20')).toBeInTheDocument()
+    // 20/1000 = 2.0%
     expect(screen.getByText('2.0%')).toBeInTheDocument()
   })
 
-  it('should display error details when provided', () => {
-    render(<ErrorSummary errors={mockErrors} totalRequests={1000} />)
+  it('displays error messages when provided', () => {
+    render(<ErrorSummary 
+      statusCodes={mockStatusCodes} 
+      errors={mockErrors}
+      totalRequests={1000} 
+    />)
     
+    expect(screen.getByText('Top Error Messages')).toBeInTheDocument()
     expect(screen.getByText('Connection timeout')).toBeInTheDocument()
     expect(screen.getByText('DNS resolution failed')).toBeInTheDocument()
     expect(screen.getByText('Connection refused')).toBeInTheDocument()
   })
 
-  it('should display error counts and percentages', () => {
-    render(<ErrorSummary errors={mockErrors} totalRequests={1000} />)
-    
-    expect(screen.getByText('25')).toBeInTheDocument()
-    expect(screen.getByText('2.5%')).toBeInTheDocument()
-    expect(screen.getByText('15')).toBeInTheDocument()
-    expect(screen.getByText('1.5%')).toBeInTheDocument()
-  })
-
-  it('should show no data messages when no status codes or errors', () => {
-    render(<ErrorSummary totalRequests={0} />)
-    
-    expect(screen.getByText('No status codes recorded')).toBeInTheDocument()
-    expect(screen.getByText('No errors recorded')).toBeInTheDocument()
-  })
-
-  it('should calculate successful and failed request counts', () => {
-    render(<ErrorSummary errors={mockErrors} totalRequests={1000} />)
-    
-    // Total errors = 25 + 15 + 10 = 50
-    // Successful = 1000 - 50 = 950
-    expect(screen.getByText('950')).toBeInTheDocument() // Successful
-    expect(screen.getByText('50')).toBeInTheDocument()  // Failed
-  })
-
-  it('should limit error display to top 5 errors', () => {
+  it('limits error messages to top 5', () => {
     const manyErrors = {
       'Error 1': 100,
       'Error 2': 90,
@@ -81,24 +87,54 @@ describe('ErrorSummary', () => {
       'Error 4': 70,
       'Error 5': 60,
       'Error 6': 50,
-      'Error 7': 40,
+      'Error 7': 40
     }
     
-    render(<ErrorSummary errors={manyErrors} totalRequests={1000} />)
+    render(<ErrorSummary 
+      statusCodes={mockStatusCodes} 
+      errors={manyErrors}
+      totalRequests={1000} 
+    />)
     
-    // Should show first 5 errors
+    // Should show top 5 errors
     expect(screen.getByText('Error 1')).toBeInTheDocument()
+    expect(screen.getByText('Error 2')).toBeInTheDocument()
+    expect(screen.getByText('Error 3')).toBeInTheDocument()
+    expect(screen.getByText('Error 4')).toBeInTheDocument()
     expect(screen.getByText('Error 5')).toBeInTheDocument()
     
-    // Should show "and X more" message
-    expect(screen.getByText('... and 2 more error types')).toBeInTheDocument()
+    // Should not show 6th and 7th errors
+    expect(screen.queryByText('Error 6')).not.toBeInTheDocument()
+    expect(screen.queryByText('Error 7')).not.toBeInTheDocument()
   })
 
-  it('should handle zero total requests gracefully', () => {
-    render(<ErrorSummary statusCodes={mockStatusCodes} totalRequests={0} />)
+  it('handles redirect status codes', () => {
+    const statusCodesWithRedirects = {
+      200: 800,
+      301: 100,
+      302: 50,
+      404: 30,
+      500: 20
+    }
     
-    // Should show 0.0% for all percentages
-    const percentages = screen.getAllByText('0.0%')
-    expect(percentages.length).toBeGreaterThan(0)
+    render(<ErrorSummary 
+      statusCodes={statusCodesWithRedirects} 
+      totalRequests={1000} 
+    />)
+    
+    // Redirect count (301 + 302 = 150)
+    expect(screen.getByText('150')).toBeInTheDocument()
+  })
+
+  it('sorts status codes by count descending', () => {
+    render(<ErrorSummary statusCodes={mockStatusCodes} totalRequests={1000} />)
+    
+    const statusElements = screen.getAllByText(/\d{3} \(\d+\)/)
+    
+    // Should be sorted: 200 (850), 201 (100), 404 (30), 500 (20)
+    expect(statusElements[0]).toHaveTextContent('200 (850)')
+    expect(statusElements[1]).toHaveTextContent('201 (100)')
+    expect(statusElements[2]).toHaveTextContent('404 (30)')
+    expect(statusElements[3]).toHaveTextContent('500 (20)')
   })
 })
