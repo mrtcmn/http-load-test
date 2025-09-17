@@ -6,8 +6,11 @@ BINARY_NAME=http-load-test
 # Build directory
 BUILD_DIR=bin
 
+# Get version from package.json
+VERSION=$(shell node -p "require('./package.json').version")
+
 # Go build flags
-LDFLAGS=-ldflags "-s -w"
+LDFLAGS=-ldflags "-s -w -X main.Version=$(VERSION)"
 
 # Default target
 .PHONY: all

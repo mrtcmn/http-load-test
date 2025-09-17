@@ -15,7 +15,8 @@
     "build": "make build",
     "build:web": "cd web && npm run build",
     "dev:web": "cd web && npm run dev",
-    "postinstall": "node scripts/install-binary.js"
+    "postinstall": "node scripts/install-binary.js",
+    "example:load-job": "node ./example/load-job.js"
   },
   "repository": {
     "type": "git",

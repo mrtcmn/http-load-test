@@ -18,8 +18,9 @@ type TestConfig struct {
 	RequestsPerSecond  int               `json:"requestsPerSecond"`
 	ConcurrentRequests int               `json:"concurrentRequests"`
 	Timeout            Duration          `json:"timeout"`
-	SuccessChecker     string            `json:"successChecker"`  // JavaScript function as string
-	DynamicDataFunc    string            `json:"dynamicDataFunc"` // JavaScript function as string
+	SuccessChecker     string            `json:"successChecker"`          // JavaScript function as string
+	DynamicDataFunc    string            `json:"dynamicDataFunc"`         // JavaScript function as string
+	WebServerPort      int               `json:"webServerPort,omitempty"` // Port for the web server
 
 	// Additional configuration options for backward compatibility
 	RequestConfig map[string]interface{} `json:"requestConfig,omitempty"`

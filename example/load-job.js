@@ -1,7 +1,7 @@
 const HttpLoadTest = require('../index');
 
 let httpLoadInstance = new HttpLoadTest({
-  url: 'http://localhost:8001/test',
+  url: 'http://localhost:8002/test',
   method: 'post',
   totalRequest: 100,
   psRequest: 100,
@@ -26,10 +26,6 @@ httpLoadInstance.setRequestSuccessChecker((response) => {
     return false;
   }
   return false;
-});
-
-httpLoadInstance.onListener.on('finished', (stats) => {
-  console.log('Test finished', stats);
 });
 
 httpLoadInstance.setDynamicDataFunction(() => ( {

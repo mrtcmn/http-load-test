@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -105,7 +106,8 @@ func (s *Server) Start() error {
 		ErrorLog:     s.createErrorLogger(),
 	}
 
-	s.isRunning = true
+	// Create a channel to receive startup errors
+	startupErr := make(chan error, 1)
 
 	// Start server in goroutine
 	go func() {
@@ -114,10 +116,25 @@ func (s *Server) Start() error {
 			loadTestErr := errors.Wrap(err, errors.SystemError, "HTTP_SERVER_ERROR", "HTTP server error")
 			s.errorCollector.Add(loadTestErr)
 			s.logger.Error("HTTP server error: %v", loadTestErr)
+
+			// Send error to startup channel if server is not running yet
+			s.mutex.Lock()
+			if !s.isRunning {
+				startupErr <- loadTestErr
+			}
+			s.mutex.Unlock()
 		}
 	}()
 
-	return nil
+	// Wait briefly to check if server starts successfully
+	select {
+	case err := <-startupErr:
+		return err
+	case <-time.After(100 * time.Millisecond):
+		// Server started successfully
+		s.isRunning = true
+		return nil
+	}
 }
 
 // Stop stops the HTTP server
@@ -237,9 +254,9 @@ func (s *Server) errorMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// createErrorLogger creates a logger for the HTTP server
-func (s *Server) createErrorLogger() *logger.Logger {
-	return s.logger.WithPrefix("http-server-error")
+// createErrorLogger creates a standard library logger for the HTTP server
+func (s *Server) createErrorLogger() *log.Logger {
+	return log.New(os.Stderr, "[http-server-error] ", log.LstdFlags)
 }
 
 // handleStatus handles GET /api/status requests
